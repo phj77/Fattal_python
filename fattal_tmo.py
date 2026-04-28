@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.fft as fft
+import pde_multigrid
 
 def transform_ev2normal(A):
     h, w = A.shape
@@ -237,7 +238,13 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         DivG[0, :] += Gy[0, :]
 
     # PDE 풀이
-    U = solve_pde_fft(DivG)
+    #U = solve_pde_fft(DivG)
+
+    # PDE 풀이
+    if fftsolver:
+        U = solve_pde_fft(DivG)
+    else:
+        U = pde_multigrid.solve_pde_multigrid(DivG)
 
     # 지수 공간으로 복원
     gamma = 1.0
