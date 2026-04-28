@@ -63,6 +63,7 @@ def solve_pde_fft(F):
     U -= np.max(U)
     return U
 
+#same
 def gaussianBlur(I):
     h, w = I.shape
     if w < 3 or h < 3:
@@ -82,6 +83,7 @@ def gaussianBlur(I):
 
     return L
 
+#same
 def downSample(A):
     h, w = A.shape
     nh, nw = h // 2, w // 2
@@ -89,6 +91,22 @@ def downSample(A):
          A[0:2*nh:2, 1:2*nw:2] + A[1:2*nh:2, 1:2*nw:2]) * 0.25
     return B
 
+#new!
+def createGaussianPyramids(H, nlevels):
+    """C++의 createGaussianPyramids를 정확히 재현"""
+    pyramids = [H]
+    L = gaussianBlur(H)  # 먼저 블러
+
+    for k in range(1, nlevels):
+        down = downSample(L)          # 블러된 이미지를 다운샘플
+        pyramids.append(down)
+        if k < nlevels - 1:
+            L = gaussianBlur(down)    # 다음 레벨을 위해 블러
+        # 마지막 레벨은 추가 blur 불필요 (다음 단계 없음)
+
+    return pyramids
+
+#same
 def upSample(A, target_shape):
     th, tw = target_shape
     ah, aw = A.shape
@@ -96,6 +114,7 @@ def upSample(A, target_shape):
     x_idx = np.clip(np.arange(tw) // 2, 0, aw - 1)
     return A[np.ix_(y_idx, x_idx)]
 
+#same
 def calculateGradients(H, k):
     h, w = H.shape
     divider = 2.0 ** (k + 1)
@@ -112,6 +131,7 @@ def calculateGradients(H, k):
     avgGrad = np.mean(G)
     return G, avgGrad
 
+# why noise added?
 def calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal):
     h, w = gradients[-1].shape
     fi = [None] * nlevels
@@ -140,6 +160,7 @@ def calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, no
 
     return fi[0]
 
+# fixed! -> DivG part
 def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     h, w = Y.shape
     detail_level = np.clip(detail_level, 0, 3)
@@ -152,7 +173,8 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     # 로그 공간 변환
     H = np.log(100.0 * Y / maxLum + 1e-4)
 
-    # 가우시안 피라미드 구성
+    # 가우시안 피라미드 구성 
+    ###===========different========================
     mins = min(w, h)
     nlevels = 0
     temp_mins = mins
@@ -161,12 +183,15 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         temp_mins //= 2
     if nlevels == 0: nlevels = 1
 
-    pyramids = [H]
-    for k in range(1, nlevels):
-        down = downSample(pyramids[-1])
-        if k < nlevels - 1:
-            down = gaussianBlur(down)
-        pyramids.append(down)
+    # pyramids = [H]
+    # for k in range(1, nlevels):
+    #     down = downSample(pyramids[-1])
+    #     if k < nlevels - 1:
+    #         down = gaussianBlur(down)
+    #     pyramids.append(down)
+
+    pyramids = createGaussianPyramids(H, nlevels)
+    ###============================================
 
     gradients = []
     avgGrads = []
@@ -178,10 +203,22 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     # FI 행렬 계산
     FI = calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal)
 
+    # 기울기 감쇠 # 다름
+    # if fftsolver:
+    #     yp1 = np.minimum(np.arange(h) + 1, h - 2)
+    #     xp1 = np.minimum(np.arange(w) + 1, w - 2)
+    #     Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
+    #     Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
     # 기울기 감쇠
     if fftsolver:
-        yp1 = np.minimum(np.arange(h) + 1, h - 2)
-        xp1 = np.minimum(np.arange(w) + 1, w - 2)
+        # y축 경계 인덱스 처리
+        yp1 = np.arange(1, h + 1)
+        yp1[-1] = h - 2
+        
+        # x축 경계 인덱스 처리
+        xp1 = np.arange(1, w + 1)
+        xp1[-1] = w - 2
+        
         Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
         Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
     else:
