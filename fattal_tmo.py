@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.fft as fft
 import pde_multigrid
-import pde_multigrid_new
+import cv2
+import sys
 
 def transform_ev2normal(A):
     h, w = A.shape
@@ -263,6 +264,23 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
 
+    G_map = cv2.magnitude(Gx, Gy)
+    G_map_normalized = cv2.normalize(
+        G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+    
+    # # show gradient map==================================================================
+    # #show
+    # cv2.imshow('gradient magnitude map', G_map_normalized)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # sys.exit()    
+
+    # #save
+    # cv2.imwrite(f'./images/beta_images/output_image_0.9_gradient.png', G_map_normalized)
+    # sys.exit() 
+    #=======================================================================================
+
     # 다이버전스(발산) 계산
     DivG = Gx + Gy
     DivG[:, 1:] -= Gx[:, :-1]
@@ -272,15 +290,13 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         DivG[:, 0] += Gx[:, 0]
         DivG[0, :] += Gy[0, :]
 
-    # PDE 풀이
-    #U = solve_pde_fft(DivG)
 
     # PDE 풀이
     if fftsolver:
         U = solve_pde_fft(DivG)
     else:
         U = np.zeros_like(DivG)
-        U = pde_multigrid_new.solve_pde_multigrid(DivG, U)
+        U = pde_multigrid.solve_pde_multigrid(DivG, U)
 
     # 지수 공간으로 복원
     gamma = 1.0

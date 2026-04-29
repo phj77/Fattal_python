@@ -28,11 +28,11 @@ G = img_rgb[:, :, 1]
 B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
-opt_alpha = 0.24
-opt_beta = 0.73
+opt_alpha = 0.5
+opt_beta = 0.4
 opt_noise = 0.001
-newfattal = True  ##### fft_solver가 True이면 무조건 True
-fftsolver = False
+newfattal = False  ##### fft_solver가 True이면 무조건 True
+fftsolver = True
 detail_level = 0
 
 pre_gamma = 1
@@ -81,4 +81,8 @@ if is_grayscale:
     out_img_bgr = out_img_bgr[:, :, 0]
 # ─────────────────────────────────────────────────────────────────────────────
 
-cv2.imwrite('./images/output_image_newMG_newfattal_T.png', out_img_bgr)
+# cv2.imshow('image', out_img_bgr)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
+
+cv2.imwrite(f'./images/myimg_fft.png', out_img_bgr)
