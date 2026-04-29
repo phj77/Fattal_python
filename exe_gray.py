@@ -31,8 +31,8 @@ B = img_rgb[:, :, 2]
 opt_alpha = 0.12
 opt_beta = 0.90
 opt_noise = 0.001
-newfattal = True
-fftsolver = False
+newfattal = True  ##### fft_solver랑 같이 돌아가게 해야
+fftsolver = True
 detail_level = 0
 
 pre_gamma = 0.74
@@ -81,4 +81,4 @@ if is_grayscale:
     out_img_bgr = out_img_bgr[:, :, 0]
 # ─────────────────────────────────────────────────────────────────────────────
 
-cv2.imwrite('output_image_multigrid.png', out_img_bgr)
+cv2.imwrite('output_image.png', out_img_bgr)

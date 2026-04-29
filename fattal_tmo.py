@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.fft as fft
 import pde_multigrid
+import pde_multigrid_2
 
 def transform_ev2normal(A):
     h, w = A.shape
@@ -132,34 +133,68 @@ def calculateGradients(H, k):
     avgGrad = np.mean(G)
     return G, avgGrad
 
-# why noise added?
 def calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal):
+    """
+    C++의 분기 구조를 유지하면서 Numpy의 벡터화 연산을 통해 성능을 최적화한 구현체입니다.
+    외부에서 할당된 배열을 수정하는 대신, 계산이 완료된 최상위 배열을 반환합니다.
+    """
     h, w = gradients[-1].shape
     fi = [None] * nlevels
-    fi[-1] = np.ones((h, w), dtype=np.float32) if newfattal else np.zeros((h, w), dtype=np.float32)
 
+    # C++: fi[nlevels - 1] = new pfs::Array2Df(width, height);
+    # C++: if (newfattal) { ... = 1.0f; }
+    # 효율성 최적화: 조건에 따라 메모리 할당과 초기화를 분리합니다.
+    if newfattal:
+        fi[-1] = np.ones((h, w), dtype=np.float32)
+    else:
+        # newfattal == false인 경우 다음 루프에서 전체가 덮어씌워지므로
+        # np.zeros가 아닌 np.empty를 사용하여 할당 오버헤드를 제거합니다.
+        fi[-1] = np.empty((h, w), dtype=np.float32) 
+
+    # C++: for (int k = nlevels - 1; k >= 0; k--)
     for k in range(nlevels - 1, -1, -1):
-        G = gradients[k]
-        a = alfa * avgGrads[k]
         
-        G_safe = np.maximum(G, 1e-4)
-        value = ((G_safe + noise) / a) ** (beta - 1.0)
-
+        # C++: if (k >= detail_level || k == nlevels - 1 || newfattal == false)
         if k >= detail_level or k == nlevels - 1 or not newfattal:
+            
+            # C++의 이중 for 루프 내 픽셀 단위 연산을 Numpy 벡터 연산으로 완전히 대체합니다.
+            grad = gradients[k] 
+            
+            # C++: float grad = ((*gradients[k])(x, y) < 1e-4f) ? 1e-4 : (*gradients[k])(x, y);
+            # 효율성 최적화: 조건부 생성(np.where) 대신 고도로 최적화된 내부 함수(np.maximum)를 사용합니다.
+            grad_safe = np.maximum(grad, 1e-4)
+            
+            # C++: float value = powf((grad + noise) / a, beta - 1.0f);
+            a = alfa * avgGrads[k]
+            value = ((grad_safe + noise) / a) ** (beta - 1.0)
+            
+            # C++: if (newfattal) (*fi[k])(x, y) *= value;
+            # C++: else           (*fi[k])(x, y) = value;
             if newfattal:
-                fi[k] = fi[k] * value
+                fi[k] *= value  # 메모리 복사를 피하기 위한 In-place 곱셈 연산
             else:
-                fi[k] = value
-
+                fi[k] = value   # 새로운 배열 참조 할당
+                
+        # C++: if (k > 1) { fi[k - 1] = new ... } else { fi[0] = &FI; }
+        # C++: if (k > 0 && newfattal) { upSample... gaussianBlur... }
+        # 파이썬의 특성에 맞게 두 분기를 병합하여 레벨 전이(Level Transition) 과정을 단순화합니다.
         if k > 0:
             target_shape = gradients[k-1].shape
+            
             if newfattal:
+                # 하위 레벨로의 업샘플링 및 블러 처리
                 up = upSample(fi[k], target_shape)
                 fi[k-1] = gaussianBlur(up)
             else:
-                fi[k-1] = np.zeros(target_shape, dtype=np.float32)
+                # newfattal이 거짓일 경우, 다음 루프에서 fi[k] = value 구문을 통해 
+                # 배열 전체가 새롭게 덮어씌워지게 됩니다.
+                # 따라서 np.zeros 대신 할당 속도가 가장 빠른 np.empty를 사용합니다.
+                fi[k-1] = np.empty(target_shape, dtype=np.float32)
 
+    # C++에서는 FI 변수의 포인터를 교체하여 결과를 반환하지만,
+    # 파이썬에서는 로컬에서 완성된 최상위 피라미드 계층을 직접 반환하는 것이 가장 안전하고 빠릅니다.
     return fi[0]
+
 
 # fixed! -> DivG part
 def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
@@ -244,7 +279,8 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     if fftsolver:
         U = solve_pde_fft(DivG)
     else:
-        U = pde_multigrid.solve_pde_multigrid(DivG)
+        U = np.zeros_like(DivG)
+        U = pde_multigrid_2.solve_pde_multigrid(DivG, U)
 
     # 지수 공간으로 복원
     gamma = 1.0
