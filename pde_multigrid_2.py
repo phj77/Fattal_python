@@ -313,3 +313,6 @@ def solve_pde_multigrid(F, U, progress_callback=None):
 
     if progress_callback:
         progress_callback(90)
+
+
+    return U

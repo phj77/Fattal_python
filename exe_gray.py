@@ -28,15 +28,15 @@ G = img_rgb[:, :, 1]
 B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
-opt_alpha = 0.12
-opt_beta = 0.90
+opt_alpha = 0.24
+opt_beta = 0.73
 opt_noise = 0.001
-newfattal = True  ##### fft_solver랑 같이 돌아가게 해야
-fftsolver = True
+newfattal = False  ##### fft_solver가 True이면 무조건 True
+fftsolver = False
 detail_level = 0
 
-pre_gamma = 0.74
-post_gamma = 0.97
+pre_gamma = 1
+post_gamma = 1
 
 # ─── 추가: 그레이스케일일 경우 채도 복원 파라미터 무력화 ──────────────────────
 # opt_saturation은 컬러 채널 간 비율을 복원하는 파라미터입니다.
@@ -81,4 +81,4 @@ if is_grayscale:
     out_img_bgr = out_img_bgr[:, :, 0]
 # ─────────────────────────────────────────────────────────────────────────────
 
-cv2.imwrite('output_image.png', out_img_bgr)
+cv2.imwrite('./images/output_image_MG_newfattal_F.png', out_img_bgr)

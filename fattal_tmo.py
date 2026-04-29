@@ -266,7 +266,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     # 다이버전스(발산) 계산
     DivG = Gx + Gy
     DivG[:, 1:] -= Gx[:, :-1]
-    DivG[1:, :] -= Gy[:-1, :]
+    DivG[1:, :] -= Gy[:-1, :] # 0 padding 후 후방차분
 
     if fftsolver:
         DivG[:, 0] += Gx[:, 0]
