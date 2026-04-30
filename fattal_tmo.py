@@ -264,20 +264,31 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
 
-    G_map = cv2.magnitude(Gx, Gy)
-    G_map_normalized = cv2.normalize(
-        G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
     
     # # show gradient map==================================================================
     # #show
-    # cv2.imshow('gradient magnitude map', G_map_normalized)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    # sys.exit()    
+    # G_map = cv2.magnitude(Gx, Gy)
+    
+    # G_cut_min = 0.01 * 0.01
+    # G_cut_max = 1.0 - 0.005
+    # G_min_val = np.percentile(G_map, G_cut_min * 100)
+    # G_max_val = np.percentile(G_map, G_cut_max * 100)
 
-    # #save
-    # cv2.imwrite(f'./images/beta_images/output_image_0.9_gradient.png', G_map_normalized)
+    # G_map = np.maximum(G_map, G_min_val)
+    # G_map = np.minimum(G_map, G_max_val)
+
+    # G_map_normalized = cv2.normalize(
+    #     G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    # )
+
+
+    # # cv2.imshow('gradient magnitude map', G_map_normalized)
+    # # cv2.waitKey(0)
+    # # cv2.destroyAllWindows()
+    # # sys.exit()    
+
+    # # #save
+    # cv2.imwrite(f'./images/beta_images/Newfattal_Multigrid_alpha_0.3/beta_0.99_grad.png', G_map_normalized)
     # sys.exit() 
     #=======================================================================================
 

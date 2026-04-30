@@ -28,11 +28,11 @@ G = img_rgb[:, :, 1]
 B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
-opt_alpha = 0.5
-opt_beta = 0.4
+opt_alpha = 0.3
+opt_beta = 0.90
 opt_noise = 0.001
-newfattal = False  ##### fft_solver가 True이면 무조건 True
-fftsolver = True
+newfattal = True  ##### fft_solver가 True이면 무조건 True
+fftsolver = False
 detail_level = 0
 
 pre_gamma = 1
@@ -81,8 +81,22 @@ if is_grayscale:
     out_img_bgr = out_img_bgr[:, :, 0]
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# # 히스토그램 평활화 적용
+# if not is_grayscale:
+#     out_img_bgr = out_img_bgr[:, :, 0]
+# equalized_image = cv2.equalizeHist(out_img_bgr)
+# cv2.imshow('image', equalized_image)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
+
+# # cv2.imwrite('result.jpg', equalized_image)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+
 # cv2.imshow('image', out_img_bgr)
 # cv2.waitKey(0)
 # cv2.destroyAllWindows()
 
-cv2.imwrite(f'./images/myimg_fft.png', out_img_bgr)
+cv2.imwrite(f'./images/beta_images/NewFattal_Multigrid_alpha_0.3/beta_{opt_beta}.png', out_img_bgr)
