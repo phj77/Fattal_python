@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from fattal_tmo import pfstmo_fattal02
+from fattal_tmo import pfstmo_fattal02_fusion
 from gamma_correction import Frame, apply_gamma_frame
 
 # 1. 이미지 로드
@@ -29,7 +29,7 @@ B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
 opt_alpha = 0.3
-opt_beta = 0.60
+opt_betas = [0.85, 0.98] # 좌: 좌 하단 우: 그 외
 opt_noise = 0.001
 newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False
@@ -54,9 +54,9 @@ G_pre = pre_frame.y_channel.data
 B_pre = pre_frame.z_channel.data
 
 # 5. 톤 매핑
-R_out, G_out, B_out = pfstmo_fattal02(
+R_out, G_out, B_out = pfstmo_fattal02_fusion(
     R_pre, G_pre, B_pre,
-    opt_alpha, opt_beta, opt_saturation, opt_noise,
+    opt_alpha, opt_betas, opt_saturation, opt_noise,
     newfattal, fftsolver, detail_level
 )
 

@@ -240,12 +240,6 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     # FI 행렬 계산
     FI = calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal)
 
-    # 기울기 감쇠 # 다름
-    # if fftsolver:
-    #     yp1 = np.minimum(np.arange(h) + 1, h - 2)
-    #     xp1 = np.minimum(np.arange(w) + 1, w - 2)
-    #     Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
-    #     Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
     # 기울기 감쇠
     if fftsolver:
         # y축 경계 인덱스 처리
@@ -264,11 +258,17 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
 
+      
+
     
     # # show gradient map==================================================================
     # #show
     # G_map = cv2.magnitude(Gx, Gy)
-    
+
+    # #============
+    # G_map = G_map/H    
+    # #============
+
     # G_cut_min = 0.01 * 0.01
     # G_cut_max = 1.0 - 0.005
     # G_min_val = np.percentile(G_map, G_cut_min * 100)
@@ -282,13 +282,13 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     # )
 
 
-    # # cv2.imshow('gradient magnitude map', G_map_normalized)
-    # # cv2.waitKey(0)
-    # # cv2.destroyAllWindows()
-    # # sys.exit()    
+    # cv2.imshow('gradient magnitude map', G_map_normalized)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # sys.exit()    
 
     # # #save
-    # cv2.imwrite(f'./images/beta_images/Newfattal_Multigrid_alpha_0.3/beta_0.99_grad.png', G_map_normalized)
+    # cv2.imwrite(f'./images/beta_images/Newfattal_Multigrid_alpha_0.3/A/beta_0.60_grad.png', G_map_normalized)
     # sys.exit() 
     #=======================================================================================
 
@@ -335,6 +335,160 @@ def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, new
     Yr = 0.2126 * R + 0.7152 * G + 0.0722 * B
     
     L = tmo_fattal02(Yr, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level)
+
+    epsilon = 1e-4
+    Y_safe = np.maximum(Yr, epsilon)
+    L_safe = np.maximum(L, epsilon)
+
+    # RGB 채널 재결합 (채도 복원)
+    R_out = np.power(np.maximum(R / Y_safe, 0.0), opt_saturation) * L_safe
+    G_out = np.power(np.maximum(G / Y_safe, 0.0), opt_saturation) * L_safe
+    B_out = np.power(np.maximum(B / Y_safe, 0.0), opt_saturation) * L_safe
+
+    return R_out, G_out, B_out
+
+
+#===================for attach two gradient maps=========================
+def get_ideal_log_grad(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
+    h, w = Y.shape
+    detail_level = np.clip(detail_level, 0, 3)
+    
+    MSIZE = 8 if fftsolver else 32
+
+    minLum = np.min(Y)
+    maxLum = np.max(Y)
+
+    # 로그 공간 변환
+    H = np.log(100.0 * Y / maxLum + 1e-4)
+
+    # 가우시안 피라미드 구성 
+    mins = min(w, h)
+    nlevels = 0
+    temp_mins = mins
+    while temp_mins >= MSIZE:
+        nlevels += 1
+        temp_mins //= 2
+    if nlevels == 0: nlevels = 1
+    pyramids = createGaussianPyramids(H, nlevels)
+
+    gradients = []
+    avgGrads = []
+    for k in range(nlevels):
+        G, avg = calculateGradients(pyramids[k], k)
+        gradients.append(G)
+        avgGrads.append(avg)
+
+    # FI 행렬 계산
+    FI = calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal)
+
+    # 기울기 감쇠
+    if fftsolver:
+        # y축 경계 인덱스 처리
+        yp1 = np.arange(1, h + 1)
+        yp1[-1] = h - 2
+        
+        # x축 경계 인덱스 처리
+        xp1 = np.arange(1, w + 1)
+        xp1[-1] = w - 2
+        
+        Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
+        Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
+    else:
+        e = np.minimum(np.arange(w) + 1, w - 1)
+        s = np.minimum(np.arange(h) + 1, h - 1)
+        Gx = (H[:, e] - H) * FI
+        Gy = (H[s, :] - H) * FI
+    
+    # normalizing gradient=================================
+    #return Gx/H, Gy/H
+    # =====================================================
+    return Gx, Gy
+
+def solving_pde(fftsolver, Gx, Gy):
+    # 다이버전스(발산) 계산
+    DivG = Gx + Gy
+    DivG[:, 1:] -= Gx[:, :-1]
+    DivG[1:, :] -= Gy[:-1, :] # 0 padding 후 후방차분
+
+    if fftsolver:
+        DivG[:, 0] += Gx[:, 0]
+        DivG[0, :] += Gy[0, :]
+
+
+    # PDE 풀이
+    if fftsolver:
+        U = solve_pde_fft(DivG)
+    else:
+        U = np.zeros_like(DivG)
+        U = pde_multigrid.solve_pde_multigrid(DivG, U)
+
+    # 지수 공간으로 복원
+    gamma = 1.0
+    L = np.exp(gamma * U)
+
+    # 백분위수 기반 정규화 (0.1% ~ 99.5%)
+    cut_min = 0.01 * 0.1
+    cut_max = 1.0 - 0.01 * 0.5
+    min_val = np.percentile(L, cut_min * 100)
+    max_val = np.percentile(L, cut_max * 100)
+
+    L = (L - min_val) / (max_val - min_val)
+    L = np.maximum(L, 0.0)
+    
+    return L
+
+def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level):
+    Gx_1, Gy_1 = get_ideal_log_grad(Y, alfa, betas[0], noise, newfattal, fftsolver, detail_level)
+    Gx_2, Gy_2 = get_ideal_log_grad(Y, alfa, betas[1], noise, newfattal, fftsolver, detail_level)
+
+    #직접 조정=================================================================================
+    cover_area_x =[0,2500]
+    cover_area_y =[1013, 2047]
+    # cover_area_x =[0,2746]
+    # cover_area_y =[813, 2047]
+    #=========================================================================================
+
+    Gx_2[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]] = Gx_1[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]]
+    Gy_2[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]] = Gy_1[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]]
+
+    #show gradient map==================================================================
+    G_map = cv2.magnitude(Gx_2, Gy_2)
+
+    G_cut_min = 0.01 * 0.01
+    G_cut_max = 1.0 - 0.005
+    G_min_val = np.percentile(G_map, G_cut_min * 100)
+    G_max_val = np.percentile(G_map, G_cut_max * 100)
+
+    G_map = np.maximum(G_map, G_min_val)
+    G_map = np.minimum(G_map, G_max_val)
+
+    G_map_normalized = cv2.normalize(
+        G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+
+    cv2.imshow('gradient magnitude map', G_map_normalized)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    sys.exit() 
+
+    #====================================================================================
+
+    L = solving_pde(fftsolver, Gx_2, Gy_2)
+
+    return L
+
+
+def pfstmo_fattal02_fusion(R, G, B, opt_alpha, opt_betas, opt_saturation, opt_noise, newfattal, fftsolver, detail_level):
+    if fftsolver:
+        newfattal = True
+
+    if opt_noise <= 0.0:
+        opt_noise = opt_alpha * 0.01
+
+    # RGB to Y 변환 (Rec. 709 휘도 계수 사용)
+    Yr = 0.2126 * R + 0.7152 * G + 0.0722 * B
+    
+    L = tmo_fusion_grad(Yr, opt_alpha, opt_betas, opt_noise, newfattal, fftsolver, detail_level)
 
     epsilon = 1e-4
     Y_safe = np.maximum(Yr, epsilon)
