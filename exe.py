@@ -29,7 +29,7 @@ B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
 opt_alpha = 0.3
-opt_beta = 0.60
+opt_beta = 0.98
 opt_noise = 0.001
 newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False

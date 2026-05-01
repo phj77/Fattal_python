@@ -4,6 +4,8 @@ import pde_multigrid
 import cv2
 import sys
 
+import utils.utils
+
 def transform_ev2normal(A):
     h, w = A.shape
     A_copy = A.copy()
@@ -258,14 +260,27 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
 
-      
+    # gradient magnitude map의 hisgoram visualization======================================
+    G_map = cv2.magnitude(Gx, Gy)
+
+    G_cut_min = 0.01 * 0.01
+    G_cut_max = 1.0 - 0.005
+    G_min_val = np.percentile(G_map, G_cut_min * 100)
+    G_max_val = np.percentile(G_map, G_cut_max * 100)
+
+    G_map = np.maximum(G_map, G_min_val)
+    G_map = np.minimum(G_map, G_max_val)
+
+    utils.utils.plot_float_array_histogram(G_map)
+    sys.exit()
+    #======================================================================================
 
     
     # # show gradient map==================================================================
     # #show
     # G_map = cv2.magnitude(Gx, Gy)
 
-    # #============
+    # #============기울기 정규화
     # G_map = G_map/H    
     # #============
 
@@ -320,7 +335,11 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     max_val = np.percentile(L, cut_max * 100)
 
     L = (L - min_val) / (max_val - min_val)
-    L = np.maximum(L, 0.0)
+    #L = np.maximum(L, 0.0)
+    L = np.clip(L, 0, 1)
+
+    #histogram equalizaiton before quantaization
+    #L = utils.utils.exact_continuous_he(L)
     
     return L
 
@@ -348,7 +367,15 @@ def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, new
     return R_out, G_out, B_out
 
 
-#===================for attach two gradient maps=========================
+
+
+
+
+
+
+#===================for attach two gradient maps==========================================================
+#=========================================================================================================
+#==========================================================================================================
 def get_ideal_log_grad(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     h, w = Y.shape
     detail_level = np.clip(detail_level, 0, 3)
@@ -399,7 +426,7 @@ def get_ideal_log_grad(Y, alfa, beta, noise, newfattal, fftsolver, detail_level)
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
     
-    # normalizing gradient=================================
+    # normalizing gradient================================= 기울기 정규화
     #return Gx/H, Gy/H
     # =====================================================
     return Gx, Gy
@@ -441,6 +468,23 @@ def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level):
     Gx_1, Gy_1 = get_ideal_log_grad(Y, alfa, betas[0], noise, newfattal, fftsolver, detail_level)
     Gx_2, Gy_2 = get_ideal_log_grad(Y, alfa, betas[1], noise, newfattal, fftsolver, detail_level)
 
+    # gradient map의 scale을 맞춘다.==========================================================
+    #gradient map의 유효 범위는 0~k 라고 가정했음. 하방선(0)이 올라가면 추가 조치 필요함.
+    #cliping안하고 fusion
+    G_1_top_mag = utils.utils.get_top_percentile_threshold(Gx_1, Gy_1, top_percentile=0.5)
+    G_2_top_mag = utils.utils.get_top_percentile_threshold(Gx_2, Gy_2, top_percentile=0.5)
+    if G_2_top_mag > G_1_top_mag:
+        Gx_1, Gy_1 = utils.utils.clip_gradient_intensity(Gx_1, Gy_1, top_percentile=0.5)
+        Gx_1 = Gx_1 * (G_2_top_mag / G_1_top_mag)
+        Gy_1 = Gy_1 * (G_2_top_mag / G_1_top_mag)
+    else:
+        Gx_2, Gy_2 = utils.utils.clip_gradient_intensity(Gx_2, Gy_2, top_percentile=0.5)
+        Gx_2 = Gx_2 * (G_1_top_mag / G_2_top_mag)
+        Gy_2 = Gy_2 * (G_1_top_mag / G_2_top_mag)
+
+    #둘다 cliping해서 fusion
+    #========================================================================================
+
     #직접 조정=================================================================================
     cover_area_x =[0,2500]
     cover_area_y =[1013, 2047]
@@ -452,28 +496,38 @@ def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level):
     Gy_2[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]] = Gy_1[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]]
 
     #show gradient map==================================================================
-    G_map = cv2.magnitude(Gx_2, Gy_2)
+    # G_map = cv2.magnitude(Gx_2, Gy_2)
 
-    G_cut_min = 0.01 * 0.01
-    G_cut_max = 1.0 - 0.005
-    G_min_val = np.percentile(G_map, G_cut_min * 100)
-    G_max_val = np.percentile(G_map, G_cut_max * 100)
+    # G_cut_min = 0.01 * 0.01
+    # G_cut_max = 1.0 - 0.005
+    # G_min_val = np.percentile(G_map, G_cut_min * 100)
+    # G_max_val = np.percentile(G_map, G_cut_max * 100)
 
-    G_map = np.maximum(G_map, G_min_val)
-    G_map = np.minimum(G_map, G_max_val)
+    # G_map = np.maximum(G_map, G_min_val)
+    # G_map = np.minimum(G_map, G_max_val)
 
-    G_map_normalized = cv2.normalize(
-        G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
+    # G_map_normalized = cv2.normalize(
+    #     G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    # )
 
-    cv2.imshow('gradient magnitude map', G_map_normalized)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    sys.exit() 
+    # cv2.imshow('gradient magnitude map', G_map_normalized)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # sys.exit() 
 
-    #====================================================================================
+    # #====================================================================================
 
     L = solving_pde(fftsolver, Gx_2, Gy_2)
+
+    L = np.clip(L, 0, 1)
+
+    # 히스토그램 시각화
+    utils.utils.plot_float_array_histogram(L)
+    sys.exit()
+
+    #histogram equalizaiton before quantaization
+    L = utils.utils.exact_continuous_he(L,weight=0.08)
+    
 
     return L
 
