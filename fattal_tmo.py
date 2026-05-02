@@ -199,8 +199,7 @@ def calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, no
     return fi[0]
 
 
-# fixed! -> DivG part
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
+def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_weight):
     h, w = Y.shape
     detail_level = np.clip(detail_level, 0, 3)
     
@@ -213,7 +212,6 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     H = np.log(100.0 * Y / maxLum + 1e-4)
 
     # 가우시안 피라미드 구성 
-    ###===========different========================
     mins = min(w, h)
     nlevels = 0
     temp_mins = mins
@@ -222,15 +220,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         temp_mins //= 2
     if nlevels == 0: nlevels = 1
 
-    # pyramids = [H]
-    # for k in range(1, nlevels):
-    #     down = downSample(pyramids[-1])
-    #     if k < nlevels - 1:
-    #         down = gaussianBlur(down)
-    #     pyramids.append(down)
-
     pyramids = createGaussianPyramids(H, nlevels)
-    ###============================================
 
     gradients = []
     avgGrads = []
@@ -259,6 +249,10 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
         s = np.minimum(np.arange(h) + 1, h - 1)
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
+
+    #Gradient Clip=============================================
+    Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.5)
+    #==========================================================
 
     # gradient magnitude map의 hisgoram visualization======================================
     G_map = cv2.magnitude(Gx, Gy)
@@ -339,11 +333,11 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level):
     L = np.clip(L, 0, 1)
 
     #histogram equalizaiton before quantaization
-    #L = utils.utils.exact_continuous_he(L)
+    L = utils.utils.exact_continuous_he(L, HE_weight)
     
     return L
 
-def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, newfattal, fftsolver, detail_level):
+def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, newfattal, fftsolver, detail_level, HE_weight):
     if fftsolver:
         newfattal = True
 
@@ -353,7 +347,7 @@ def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, new
     # RGB to Y 변환 (Rec. 709 휘도 계수 사용)
     Yr = 0.2126 * R + 0.7152 * G + 0.0722 * B
     
-    L = tmo_fattal02(Yr, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level)
+    L = tmo_fattal02(Yr, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, HE_weight)
 
     epsilon = 1e-4
     Y_safe = np.maximum(Yr, epsilon)
@@ -426,7 +420,7 @@ def get_ideal_log_grad(Y, alfa, beta, noise, newfattal, fftsolver, detail_level)
         Gx = (H[:, e] - H) * FI
         Gy = (H[s, :] - H) * FI
     
-    # normalizing gradient================================= 기울기 정규화
+    # normalizing gradient================================= 기울기 정규화 <--- 안하는게 나음.
     #return Gx/H, Gy/H
     # =====================================================
     return Gx, Gy
@@ -464,7 +458,7 @@ def solving_pde(fftsolver, Gx, Gy):
     
     return L
 
-def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level):
+def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level, HE_weight):
     Gx_1, Gy_1 = get_ideal_log_grad(Y, alfa, betas[0], noise, newfattal, fftsolver, detail_level)
     Gx_2, Gy_2 = get_ideal_log_grad(Y, alfa, betas[1], noise, newfattal, fftsolver, detail_level)
 
@@ -486,34 +480,34 @@ def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level):
     #========================================================================================
 
     #직접 조정=================================================================================
-    cover_area_x =[0,2500]
-    cover_area_y =[1013, 2047]
-    # cover_area_x =[0,2746]
-    # cover_area_y =[813, 2047]
+    # cover_area_x =[0,2500]
+    # cover_area_y =[1013, 2047]
+    cover_area_x =[0,2746]
+    cover_area_y =[813, 2047]
     #=========================================================================================
 
     Gx_2[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]] = Gx_1[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]]
     Gy_2[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]] = Gy_1[cover_area_y[0]:cover_area_y[1], cover_area_x[0]:cover_area_x[1]]
 
     #show gradient map==================================================================
-    # G_map = cv2.magnitude(Gx_2, Gy_2)
+    G_map = cv2.magnitude(Gx_2, Gy_2)
 
-    # G_cut_min = 0.01 * 0.01
-    # G_cut_max = 1.0 - 0.005
-    # G_min_val = np.percentile(G_map, G_cut_min * 100)
-    # G_max_val = np.percentile(G_map, G_cut_max * 100)
+    G_cut_min = 0.01 * 0.01
+    G_cut_max = 1.0 - 0.005
+    G_min_val = np.percentile(G_map, G_cut_min * 100)
+    G_max_val = np.percentile(G_map, G_cut_max * 100)
 
-    # G_map = np.maximum(G_map, G_min_val)
-    # G_map = np.minimum(G_map, G_max_val)
+    G_map = np.maximum(G_map, G_min_val)
+    G_map = np.minimum(G_map, G_max_val)
 
-    # G_map_normalized = cv2.normalize(
-    #     G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    # )
+    G_map_normalized = cv2.normalize(
+        G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
 
-    # cv2.imshow('gradient magnitude map', G_map_normalized)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    # sys.exit() 
+    cv2.imshow('gradient magnitude map', G_map_normalized)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    sys.exit() 
 
     # #====================================================================================
 
@@ -522,17 +516,19 @@ def tmo_fusion_grad(Y, alfa, betas, noise, newfattal, fftsolver, detail_level):
     L = np.clip(L, 0, 1)
 
     # 히스토그램 시각화
-    utils.utils.plot_float_array_histogram(L)
-    sys.exit()
+    # utils.utils.plot_float_array_histogram(L)
+    # sys.exit()
 
     #histogram equalizaiton before quantaization
-    L = utils.utils.exact_continuous_he(L,weight=0.08)
+    #weight = 0 -> Do not apply HE
+    #weight = 1 -> apply Full HE
+    L = utils.utils.exact_continuous_he(L,weight=HE_weight)
     
 
     return L
 
 
-def pfstmo_fattal02_fusion(R, G, B, opt_alpha, opt_betas, opt_saturation, opt_noise, newfattal, fftsolver, detail_level):
+def pfstmo_fattal02_fusion(R, G, B, opt_alpha, opt_betas, opt_saturation, opt_noise, newfattal, fftsolver, detail_level, HE_weight):
     if fftsolver:
         newfattal = True
 
@@ -542,7 +538,7 @@ def pfstmo_fattal02_fusion(R, G, B, opt_alpha, opt_betas, opt_saturation, opt_no
     # RGB to Y 변환 (Rec. 709 휘도 계수 사용)
     Yr = 0.2126 * R + 0.7152 * G + 0.0722 * B
     
-    L = tmo_fusion_grad(Yr, opt_alpha, opt_betas, opt_noise, newfattal, fftsolver, detail_level)
+    L = tmo_fusion_grad(Yr, opt_alpha, opt_betas, opt_noise, newfattal, fftsolver, detail_level, HE_weight)
 
     epsilon = 1e-4
     Y_safe = np.maximum(Yr, epsilon)

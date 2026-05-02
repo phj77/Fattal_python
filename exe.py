@@ -5,7 +5,7 @@ from fattal_tmo import pfstmo_fattal02
 from gamma_correction import Frame, apply_gamma_frame
 
 # 1. 이미지 로드
-img_path = 'input.hdr'
+img_path = './test/input/image5.hdr'
 img = cv2.imread(img_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
 
 if img is None:
@@ -29,14 +29,17 @@ B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
 opt_alpha = 0.3
-opt_beta = 0.98
+opt_beta = 0.93
 opt_noise = 0.001
 newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False
-detail_level = 0
+detail_level = 0 # 0이 보통 더 나은듯
+HE_weight = 0.15 #histogram equalizaiton before quantaization:   weight = 0 -> Do not apply HE || weight = 1 -> apply Full HE
 
 pre_gamma = 1
 post_gamma = 1
+
+np.clip(HE_weight, 0, 1)
 
 # ─── 추가: 그레이스케일일 경우 채도 복원 파라미터 무력화 ──────────────────────
 # opt_saturation은 컬러 채널 간 비율을 복원하는 파라미터입니다.
@@ -57,7 +60,7 @@ B_pre = pre_frame.z_channel.data
 R_out, G_out, B_out = pfstmo_fattal02(
     R_pre, G_pre, B_pre,
     opt_alpha, opt_beta, opt_saturation, opt_noise,
-    newfattal, fftsolver, detail_level
+    newfattal, fftsolver, detail_level, HE_weight
 )
 
 # 6. 후처리 감마 보정
@@ -80,19 +83,6 @@ out_img_bgr = cv2.cvtColor(out_img_8bit, cv2.COLOR_RGB2BGR)
 if is_grayscale:
     out_img_bgr = out_img_bgr[:, :, 0]
 # ─────────────────────────────────────────────────────────────────────────────
-
-# ─────────────────────────────────────────────────────────────────────────────
-# # 히스토그램 평활화 적용
-# if not is_grayscale:
-#     out_img_bgr = out_img_bgr[:, :, 0]
-# equalized_image = cv2.equalizeHist(out_img_bgr)
-# cv2.imshow('image', equalized_image)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
-
-# # cv2.imwrite('result.jpg', equalized_image)
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 
 cv2.imshow('image', out_img_bgr)

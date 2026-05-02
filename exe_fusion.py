@@ -34,9 +34,12 @@ opt_noise = 0.001
 newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False
 detail_level = 0
+HE_weight = 0.0 #histogram equalizaiton before quantaization:   weight = 0 -> Do not apply HE || weight = 1 -> apply Full HE
 
 pre_gamma = 1
 post_gamma = 1
+
+np.clip(HE_weight, 0, 1)
 
 # ─── 추가: 그레이스케일일 경우 채도 복원 파라미터 무력화 ──────────────────────
 # opt_saturation은 컬러 채널 간 비율을 복원하는 파라미터입니다.
@@ -57,7 +60,7 @@ B_pre = pre_frame.z_channel.data
 R_out, G_out, B_out = pfstmo_fattal02_fusion(
     R_pre, G_pre, B_pre,
     opt_alpha, opt_betas, opt_saturation, opt_noise,
-    newfattal, fftsolver, detail_level
+    newfattal, fftsolver, detail_level, HE_weight
 )
 
 # 6. 후처리 감마 보정
