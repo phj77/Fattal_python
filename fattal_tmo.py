@@ -251,22 +251,22 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
         Gy = (H[s, :] - H) * FI
 
     #Gradient Clip=============================================
-    Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.5)
+    # Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.0)
     #==========================================================
 
     # gradient magnitude map의 hisgoram visualization======================================
-    G_map = cv2.magnitude(Gx, Gy)
+    # G_map = cv2.magnitude(Gx, Gy)
 
-    G_cut_min = 0.01 * 0.01
-    G_cut_max = 1.0 - 0.005
-    G_min_val = np.percentile(G_map, G_cut_min * 100)
-    G_max_val = np.percentile(G_map, G_cut_max * 100)
+    # G_cut_min = 0.01 * 0.01
+    # G_cut_max = 1.0 - 0.005
+    # G_min_val = np.percentile(G_map, G_cut_min * 100)
+    # G_max_val = np.percentile(G_map, G_cut_max * 100)
 
-    G_map = np.maximum(G_map, G_min_val)
-    G_map = np.minimum(G_map, G_max_val)
+    # G_map = np.maximum(G_map, G_min_val)
+    # G_map = np.minimum(G_map, G_max_val)
 
-    utils.utils.plot_float_array_histogram(G_map)
-    sys.exit()
+    # utils.utils.plot_float_array_histogram(G_map)
+    # sys.exit()
     #======================================================================================
 
     
