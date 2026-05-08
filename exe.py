@@ -28,8 +28,8 @@ G = img_rgb[:, :, 1]
 B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
-opt_alpha = 0.9
-opt_beta = 0.8
+opt_alpha = 0.3
+opt_beta = 0.93
 opt_noise = 0.001
 newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False
@@ -91,4 +91,4 @@ if is_grayscale:
 # cv2.waitKey(0)
 # cv2.destroyAllWindows()
 
-cv2.imwrite(f'./test/test_server.png', out_img_bgr)
+#cv2.imwrite(f'./images/beta_images/NewFattal_Multigrid_alpha_0.3/beta_{opt_beta}.png', out_img_bgr)
