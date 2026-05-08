@@ -251,7 +251,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
         Gy = (H[s, :] - H) * FI
 
     #Gradient Clip=============================================
-    Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.5)
+    Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.0)
     #==========================================================
 
     # gradient magnitude map의 hisgoram visualization======================================

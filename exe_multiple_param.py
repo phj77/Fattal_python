@@ -95,7 +95,7 @@ def main():
 
             # 식별 가능한 파일명 생성 및 저장
             # 주요 파라미터를 파일명에 포함하여 덮어쓰기를 방지하고 결과를 구분합니다.
-            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_he{he_weight_clipped}"
+            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_he{he_weight_clipped}_pre{p['pre_gamma']}_post{p['post_gamma']}"
             save_name = f"{file_name}_{param_suffix}.png"
             save_path = os.path.join(OUTPUT_DIR, save_name)
 

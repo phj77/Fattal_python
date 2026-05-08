@@ -5,7 +5,7 @@ from fattal_tmo import pfstmo_fattal02
 from gamma_correction import Frame, apply_gamma_frame
 
 # 1. 이미지 로드
-img_path = './test/input/image5.hdr'
+img_path = './test/input/6/01_3072 x 2048_pos(1)_NG.hdr'
 img = cv2.imread(img_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
 
 if img is None:
@@ -28,13 +28,13 @@ G = img_rgb[:, :, 1]
 B = img_rgb[:, :, 2]
 
 # 3. 파라미터 설정
-opt_alpha = 0.3
-opt_beta = 0.93
+opt_alpha = 0.9
+opt_beta = 0.89
 opt_noise = 0.001
 newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False
 detail_level = 0 # 0이 보통 더 나은듯
-HE_weight = 0.15 #histogram equalizaiton before quantaization:   weight = 0 -> Do not apply HE || weight = 1 -> apply Full HE
+HE_weight = 0.0 #histogram equalizaiton before quantaization:   weight = 0 -> Do not apply HE || weight = 1 -> apply Full HE
 
 pre_gamma = 1
 post_gamma = 1
@@ -85,8 +85,10 @@ if is_grayscale:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-cv2.imshow('image', out_img_bgr)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# print(f"이미지 해상도: {out_img_bgr.shape[1]}x{out_img_bgr.shape[0]}")
+# cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+# cv2.imshow('image', out_img_bgr)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
 
-#cv2.imwrite(f'./images/beta_images/NewFattal_Multigrid_alpha_0.3/beta_{opt_beta}.png', out_img_bgr)
+cv2.imwrite(f'./test/output/6/gradclip/{opt_alpha}_b{opt_beta}_gradclip_top40.0.png', out_img_bgr)
