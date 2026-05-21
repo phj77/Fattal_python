@@ -9,7 +9,7 @@ from fattal_tmo import pfstmo_fattal02_fusion
 from gamma_correction import Frame, apply_gamma_frame
 
 # 파라미터 및 설정 불러오기
-from config_fusion import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from exe.config.config_grad_fusion import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 def main():
     if not os.path.exists(OUTPUT_DIR):

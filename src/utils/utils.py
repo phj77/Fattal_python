@@ -72,8 +72,28 @@ def plot_float_array_histogram(data_array, bins=10000):
     plt.ylabel('Frequency')
     plt.grid(axis='y', alpha=0.3)
     plt.legend()
-    
     plt.show()
+
+def plot_gradient_map(Gx, Gy, cut_min, cut_max):
+    """
+    using Gx, Gy gradient map, plot gradient map.
+    you can cut highest {cut_max}% intensity / lowest {cut_min}%
+    """
+    G_map = cv2.magnitude(Gx, Gy)
+    G_min_val = np.percentile(G_map, cut_min * 100)
+    G_max_val = np.percentile(G_map, cut_max * 100)
+
+    G_map = np.maximum(G_map, G_min_val)
+    G_map = np.minimum(G_map, G_max_val)
+
+    G_map_normalized = cv2.normalize(
+        G_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+    
+    cv2.imshow('gradient magnitude map', G_map_normalized)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows() 
+
 
 def clip_gradient_intensity(Gx, Gy, top_percentile=0.5):
     """
