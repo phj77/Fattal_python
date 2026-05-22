@@ -8,68 +8,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils import utils
 from fattal import pde_multigrid
+from fattal import pde_fft
 
-def transform_ev2normal(A):
-    h, w = A.shape
-    A_copy = A.copy()
-    
-    A_copy[1:h-1, 1:w-1] *= 0.25
-    A_copy[1:h-1, 0] *= 0.5
-    A_copy[1:h-1, w-1] *= 0.5
-    A_copy[0, 1:w-1] *= 0.5
-    A_copy[h-1, 1:w-1] *= 0.5
-
-    # FFTW_REDFT00은 Type 1 DCT에 해당합니다.
-    T = fft.dctn(A_copy, type=1, norm=None)
-    return T
-
-def transform_normal2ev(A):
-    h, w = A.shape
-    T = fft.dctn(A, type=1, norm=None)
-    
-    T *= (1.0 / ((h - 1) * (w - 1)))
-    T[0, :] *= 0.5
-    T[h-1, :] *= 0.5
-    T[:, 0] *= 0.5
-    T[:, w-1] *= 0.5
-    return T
-
-def get_lambda(n):
-    i = np.arange(n)
-    return -4.0 * np.sin(i / (2.0 * (n - 1)) * np.pi)**2
-
-def make_compatible_boundary(F):
-    h, w = F.shape
-    sum_val = np.sum(F[1:h-1, 1:w-1])
-    sum_val += 0.5 * (np.sum(F[1:h-1, 0]) + np.sum(F[1:h-1, w-1]))
-    sum_val += 0.5 * (np.sum(F[0, 1:w-1]) + np.sum(F[h-1, 1:w-1]))
-    sum_val += 0.25 * (F[0, 0] + F[0, w-1] + F[h-1, 0] + F[h-1, w-1])
-
-    add = -sum_val / (h + w - 3)
-    
-    F_copy = F.copy()
-    F_copy[0, :] += add
-    F_copy[h-1, :] += add
-    F_copy[1:h-1, 0] += add
-    F_copy[1:h-1, w-1] += add
-    return F_copy
-
-def solve_pde_fft(F):
-    h, w = F.shape
-    F_compat = make_compatible_boundary(F)
-    F_tr = transform_normal2ev(F_compat)
-
-    l1 = get_lambda(h).reshape(-1, 1)
-    l2 = get_lambda(w).reshape(1, -1)
-    
-    denom = l1 + l2
-    denom[0, 0] = 1.0  # 0으로 나누기 방지
-    F_tr = F_tr / denom
-    F_tr[0, 0] = 0.0
-    
-    U = transform_ev2normal(F_tr)
-    U -= np.max(U)
-    return U
 
 #same
 def gaussianBlur(I):
@@ -280,7 +220,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
 
     # PDE 풀이
     if fftsolver:
-        U = solve_pde_fft(DivG)
+        U = pde_fft.solve_pde_fftw(DivG)
     else:
         U = np.zeros_like(DivG)
         U = pde_multigrid.solve_pde_multigrid(DivG, U)
@@ -405,7 +345,7 @@ def solving_pde(fftsolver, Gx, Gy):
 
     # PDE 풀이
     if fftsolver:
-        U = solve_pde_fft(DivG)
+        U = pde_fft.solve_pde_fftw(DivG)
     else:
         U = np.zeros_like(DivG)
         U = pde_multigrid.solve_pde_multigrid(DivG, U)

@@ -28,7 +28,7 @@ PARAM_GRID = {
     'opt_beta': [0.86],
     'opt_noise': [0.001],
     'newfattal': [True],
-    'fftsolver': [False],
+    'fftsolver': [True],
     'detail_level': [0],
     'HE_weight': [0.0],
     'pre_gamma': [1.0],
