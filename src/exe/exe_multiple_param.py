@@ -3,13 +3,16 @@ import cv2
 import numpy as np
 import os
 import glob
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 사용자 정의 모듈 (환경에 맞게 존재해야 함)
-from fattal_tmo import pfstmo_fattal02
-from gamma_correction import Frame, apply_gamma_frame
+from fattal.fattal_tmo import pfstmo_fattal02
+from processing.gamma_correction import Frame, apply_gamma_frame
 
 # 파라미터 및 설정 불러오기
-from config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 def main():
     # 출력 디렉토리가 존재하지 않으면 생성합니다.
