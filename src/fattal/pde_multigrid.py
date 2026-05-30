@@ -1,11 +1,17 @@
 import math
 import numpy as np
+
 try:
-    from numba import njit
+    from numba import njit, prange
 except ImportError:
     # Numba가 설치되지 않은 환경을 대비한 더미 데코레이터
-    def njit(func):
-        return func
+    def njit(*args, **kwargs):
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+    prange = range
 
 # 다중 레벨 솔버를 위한 전역 설정 값
 MODYF = 0
@@ -16,18 +22,13 @@ BCG_TOL = 1e-3
 V_CYCLE = 2
 
 # 솔루션 후처리 개선을 위한 추가 CG 반복 설정
-BCG_POST_IMPROVE = False #원래 False, True로 실험 진행
+BCG_POST_IMPROVE = False
 BCG_POST_STEPS = 1000
 BCG_POST_TOL = 1e-7
 
 EPS = 1.0e-12
 
-#===========================================================
-#OPM_THRESHOLD 없음
-#===========================================================
-
-#same
-@njit
+@njit(parallel=True, fastmath=True)
 def restrict(in_arr, out_arr):
     in_rows, in_cols = in_arr.shape
     out_rows, out_cols = out_arr.shape
@@ -36,10 +37,10 @@ def restrict(in_arr, out_arr):
     dy = in_rows / out_rows
     filter_size = 0.5
 
-    sy = dy / 2.0 - 0.5
-    for y in range(out_rows):
-        sx = dx / 2.0 - 0.5
+    for y in prange(out_rows):
+        sy = dy / 2.0 - 0.5 + y * dy
         for x in range(out_cols):
+            sx = dx / 2.0 - 0.5 + x * dx
             pix_val = 0.0
             w = 0.0
             
@@ -55,12 +56,8 @@ def restrict(in_arr, out_arr):
             
             if w > 0:
                 out_arr[y, x] = pix_val / w
-            
-            sx += dx
-        sy += dy
 
-#same
-@njit
+@njit(parallel=True, fastmath=True)
 def prolongate(in_arr, out_arr):
     in_rows, in_cols = in_arr.shape
     out_rows, out_cols = out_arr.shape
@@ -69,10 +66,10 @@ def prolongate(in_arr, out_arr):
     dy = in_rows / out_rows
     filter_size = 1.0
 
-    sy = -dy / 2.0
-    for y in range(out_rows):
-        sx = -dx / 2.0
+    for y in prange(out_rows):
+        sy = -dy / 2.0 + y * dy
         for x in range(out_cols):
+            sx = -dx / 2.0 + x * dx
             pix_val = 0.0
             weight = 0.0
 
@@ -92,83 +89,82 @@ def prolongate(in_arr, out_arr):
 
             if weight != 0:
                 out_arr[y, x] = pix_val / weight
-            
-            sx += dx
-        sy += dy
 
-#same
+@njit(fastmath=True)
 def exact_sollution(F, U):
-    U.fill(0.0)
+    for i in range(U.shape[0]):
+        for j in range(U.shape[1]):
+            U[i, j] = 0.0
 
-#same
 def smooth(U, F):
     rows, cols = U.shape
     U_flat = U.reshape(-1)
     F_flat = F.reshape(-1)
     linbcg(F_flat, U_flat, BCG_TOL, BCG_STEPS, rows, cols)
 
-#same
+@njit(parallel=True, fastmath=True)
 def calculate_defect(D, U, F):
-    """
-    불필요한 4개의 임시 배열 생성을 제거하고 In-place 연산으로 대체.
-    수학적으로 기존의 D[:] = F - (U_e + U_w + U_n + U_s - 4*U) 연산과 완전히 동일함.
-    """
-    # D = F + 4.0 * U
-    np.add(F, U * 4.0, out=D)
+    rows, cols = U.shape
+    for i in prange(rows):
+        for j in range(cols):
+            val = F[i, j] + 4.0 * U[i, j]
+            
+            if j < cols - 1: val -= U[i, j+1]
+            else: val -= U[i, cols-1]
+            
+            if j > 0: val -= U[i, j-1]
+            else: val -= U[i, 0]
+            
+            if i < rows - 1: val -= U[i+1, j]
+            else: val -= U[rows-1, j]
+            
+            if i > 0: val -= U[i-1, j]
+            else: val -= U[0, j]
+            
+            D[i, j] = val
 
-    # - U_e
-    D[:, :-1] -= U[:, 1:]
-    D[:, -1] -= U[:, -1]
-
-    # - U_w
-    D[:, 1:] -= U[:, :-1]
-    D[:, 0] -= U[:, 0]
-
-    # - U_s
-    D[:-1, :] -= U[1:, :]
-    D[-1, :] -= U[-1, :]
-
-    # - U_n
-    D[1:, :] -= U[:-1, :]
-    D[0, :] -= U[0, :]
-
-#same
+@njit(fastmath=True)
 def add_correction(U, C):
-    U += C
+    for i in range(U.shape[0]):
+        for j in range(U.shape[1]):
+            U[i, j] += C[i, j]
 
-#same
+@njit(parallel=True, fastmath=True)
 def asolve(b, x):
-    # 배열 할당 없는 In-place 연산
-    np.multiply(b, -4.0, out=x)
+    for i in prange(len(b)):
+        x[i] = b[i] * -4.0
 
-#same
+@njit(parallel=True, fastmath=True)
 def atimes(x, res, rows, cols):
-    X2D = x.reshape((rows, cols))
-    RES2D = res.reshape((rows, cols))
+    for i in prange(rows):
+        for j in range(cols):
+            idx = i * cols + j
+            val = 0.0
+            
+            if j < cols - 1: val += x[idx + 1]
+            else: val += x[idx]
+            
+            if j > 0: val += x[idx - 1]
+            else: val += x[idx]
+            
+            if i < rows - 1: val += x[(i + 1) * cols + j]
+            else: val += x[idx]
+            
+            if i > 0: val += x[(i - 1) * cols + j]
+            else: val += x[idx]
+            
+            res[idx] = val - 4.0 * x[idx]
 
-    # 내부 영역
-    RES2D[1:-1, 1:-1] = X2D[:-2, 1:-1] + X2D[2:, 1:-1] + X2D[1:-1, :-2] + X2D[1:-1, 2:] - 4.0 * X2D[1:-1, 1:-1]
-
-    # 모서리
-    RES2D[1:-1, 0] = X2D[:-2, 0] + X2D[2:, 0] + X2D[1:-1, 1] - 3.0 * X2D[1:-1, 0]
-    RES2D[1:-1, -1] = X2D[:-2, -1] + X2D[2:, -1] + X2D[1:-1, -2] - 3.0 * X2D[1:-1, -1]
-    RES2D[0, 1:-1] = X2D[1, 1:-1] + X2D[0, :-2] + X2D[0, 2:] - 3.0 * X2D[0, 1:-1]
-    RES2D[-1, 1:-1] = X2D[-2, 1:-1] + X2D[-1, :-2] + X2D[-1, 2:] - 3.0 * X2D[-1, 1:-1]
-
-    # 꼭짓점
-    RES2D[0, 0] = X2D[1, 0] + X2D[0, 1] - 2.0 * X2D[0, 0]
-    RES2D[-1, 0] = X2D[-2, 0] + X2D[-1, 1] - 2.0 * X2D[-1, 0]
-    RES2D[0, -1] = X2D[1, -1] + X2D[0, -2] - 2.0 * X2D[0, -1]
-    RES2D[-1, -1] = X2D[-2, -1] + X2D[-1, -2] - 2.0 * X2D[-1, -1]
-
-# same
+@njit(fastmath=True)
 def snrm(sx):
-    return np.linalg.norm(sx)
+    s = 0.0
+    for i in range(len(sx)):
+        s += sx[i] * sx[i]
+    return math.sqrt(s)
 
-# 대체적으로 같으나 원본 함수의 깊은 라이브러리를 쓰므로, 오류 많으면 재확인하기
+@njit(fastmath=True)
 def linbcg(b, x, tol, itmax, rows, cols):
     n = len(b)
-    # np.zeros 대신 np.empty를 사용하여 할당 오버헤드 최소화
     p = np.empty(n, dtype=np.float32)
     pp = np.empty(n, dtype=np.float32)
     r = np.empty(n, dtype=np.float32)
@@ -179,11 +175,10 @@ def linbcg(b, x, tol, itmax, rows, cols):
     iter_count = 0
     atimes(x, r, rows, cols)
     
-    # r[:] = b - r
-    np.subtract(b, r, out=r)
-    
-    # rr 전체를 덮어쓰지만 기존 코드의 흐름(rr[:] = r[:])을 정확히 반영
-    np.copyto(rr, r)
+    for i in range(n):
+        r[i] = b[i] - r[i]
+        rr[i] = r[i]
+        
     atimes(r, rr, rows, cols)
     
     bnrm = snrm(b)
@@ -191,36 +186,41 @@ def linbcg(b, x, tol, itmax, rows, cols):
         bnrm = 1.0
 
     asolve(r, z)
-
+    
+    bkden = 0.0
     while iter_count <= itmax:
         iter_count += 1
         asolve(rr, zz)
         
-        bknum = np.dot(z, rr)
+        bknum = 0.0
+        for i in range(n):
+            bknum += z[i] * rr[i]
         
         if iter_count == 1:
-            np.copyto(p, z)
-            np.copyto(pp, zz)
+            for i in range(n):
+                p[i] = z[i]
+                pp[i] = zz[i]
         else:
             bk = bknum / bkden
-            # In-place 갱신
-            p *= bk
-            p += z
-            pp *= bk
-            pp += zz
+            for i in range(n):
+                p[i] = bk * p[i] + z[i]
+                pp[i] = bk * pp[i] + zz[i]
             
         bkden = bknum
         atimes(p, z, rows, cols)
         
-        akden = np.dot(z, pp)
+        akden = 0.0
+        for i in range(n):
+            akden += z[i] * pp[i]
+            
         ak = bknum / akden if akden != 0 else 0.0
         
         atimes(pp, zz, rows, cols)
         
-        # In-place 감가산으로 메모리 재할당 방지
-        x += ak * p
-        r -= ak * z
-        rr -= ak * zz
+        for i in range(n):
+            x[i] += ak * p[i]
+            r[i] -= ak * z[i]
+            rr[i] -= ak * zz[i]
         
         asolve(r, z)
         
@@ -230,7 +230,6 @@ def linbcg(b, x, tol, itmax, rows, cols):
             
     return iter_count, err
 
-#same
 def solve_pde_multigrid(F, U, progress_callback=None):
     ymax, xmax = F.shape
 
@@ -244,7 +243,6 @@ def solve_pde_multigrid(F, U, progress_callback=None):
     IU = [None] * (levels + 1)
     VF = [None] * (levels + 1)
     
-    # V-사이클 내 반복적인 메모리 할당 방지를 위한 배열 풀(Pool) 생성
     D_pool = [None] * (levels + 1)
     C_pool = [None] * (levels + 1)
 
@@ -261,7 +259,6 @@ def solve_pde_multigrid(F, U, progress_callback=None):
         IU[k+1] = np.zeros((sy, sx), dtype=np.float32)
         VF[k+1] = np.zeros((sy, sx), dtype=np.float32)
         
-        # 각 레벨에 맞는 D, C 버퍼 미리 할당
         D_pool[k] = np.zeros((RHS[k].shape[0], RHS[k].shape[1]), dtype=np.float32)
         C_pool[k] = np.zeros((RHS[k].shape[0], RHS[k].shape[1]), dtype=np.float32)
         
@@ -287,7 +284,6 @@ def solve_pde_multigrid(F, U, progress_callback=None):
                 for _ in range(SMOOTH_IT):
                     smooth(IU[k2], VF[k2])
 
-                # 루프 내 np.zeros_like 생성을 제거하고 사전 할당된 버퍼 사용
                 D = D_pool[k2]
                 calculate_defect(D, IU[k2], VF[k2])
                 restrict(D, VF[k2+1])

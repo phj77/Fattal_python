@@ -1,8 +1,17 @@
 import cv2
 import numpy as np
+import os
+import glob
+import sys
+import time
 
-from fattal_tmo import pfstmo_fattal02
-from gamma_correction import Frame, apply_gamma_frame
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 사용자 정의 모듈 (환경에 맞게 존재해야 함)
+from fattal.fattal_tmo import pfstmo_fattal02
+from processing.gamma_correction import Frame, apply_gamma_frame
+
+start_time = time.perf_counter()
 
 # 1. 이미지 로드
 img_path = './test/input/6/01_3072 x 2048_pos(1)_NG.hdr'
@@ -92,3 +101,8 @@ if is_grayscale:
 # cv2.destroyAllWindows()
 
 cv2.imwrite(f'./test/test_server.png', out_img_bgr)
+
+end_time = time.perf_counter()
+execution_time = end_time - start_time
+print(f"실행 시간: {execution_time:.6f} 초")
+print("\n모든 작업이 종료되었습니다.")
