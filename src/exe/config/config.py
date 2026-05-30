@@ -9,7 +9,7 @@ data_path = project_root / "data"
 
 # 입출력 디렉토리 설정
 INPUT_DIR = str(data_path / "4")
-OUTPUT_DIR = str(data_path / "test" )
+OUTPUT_DIR = str(data_path / "test")
 
 # ─── 파라미터 자동 생성 설정 ───────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)

@@ -4,6 +4,7 @@ import numpy as np
 import os
 import glob
 import sys
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,6 +14,8 @@ from processing.gamma_correction import Frame, apply_gamma_frame
 
 # 파라미터 및 설정 불러오기
 from config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+
+start_time = time.perf_counter()
 
 def main():
     # 출력 디렉토리가 존재하지 않으면 생성합니다.
@@ -104,7 +107,10 @@ def main():
 
             cv2.imwrite(save_path, out_img_bgr)
             print(f"완료: {save_path}")
-
+    
+    end_time = time.perf_counter()
+    execution_time = end_time - start_time
+    print(f"실행 시간: {execution_time:.6f} 초")
     print("\n모든 작업이 종료되었습니다.")
 
 if __name__ == "__main__":

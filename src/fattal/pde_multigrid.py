@@ -16,7 +16,7 @@ BCG_TOL = 1e-3
 V_CYCLE = 2
 
 # 솔루션 후처리 개선을 위한 추가 CG 반복 설정
-BCG_POST_IMPROVE = False
+BCG_POST_IMPROVE = False #원래 False, True로 실험 진행
 BCG_POST_STEPS = 1000
 BCG_POST_TOL = 1e-7
 

@@ -1,111 +1,126 @@
 import numpy as np
 import pyfftw
+import pyfftw.interfaces.scipy_fft as fftw_fft
 import multiprocessing
 
-# 반복적인 FFT 연산 수행 시 플랜 생성 오버헤드를 줄이기 위해 캐싱 활성화
+# 연산 속도 최적화를 위해 PyFFTW 캐시를 활성화하고, 가용한 최대 스레드를 할당합니다.
 pyfftw.interfaces.cache.enable()
+pyfftw.config.NUM_THREADS = multiprocessing.cpu_count()
+
+def transform_ev2normal(A: np.ndarray) -> np.ndarray:
+    """고유 벡터 공간에서 원래 공간으로 변환합니다."""
+    height, width = A.shape
+    
+    # Numpy 배열 연산을 통한 빠른 스케일링 적용
+    S = np.ones((height, width), dtype=np.float32)
+    S[1:-1, 1:-1] = 0.25
+    S[0, 1:-1] = 0.5
+    S[-1, 1:-1] = 0.5
+    S[1:-1, 0] = 0.5
+    S[1:-1, -1] = 0.5
+    
+    A_scaled = A * S
+    
+    # FFTW_REDFT00에 대응하는 DCT-I (type=1) 실행
+    T = fftw_fft.dctn(A_scaled, type=1, norm=None).astype(np.float32)
+    return T
+
+def transform_normal2ev(A: np.ndarray) -> np.ndarray:
+    """원래 공간에서 고유 벡터 공간으로 변환합니다."""
+    height, width = A.shape
+    
+    # 2D DCT-I 실행
+    T = fftw_fft.dctn(A, type=1, norm=None).astype(np.float32)
+    
+    # 출력 매트릭스 스케일링
+    S = np.ones((height, width), dtype=np.float32)
+    S[0, :] *= 0.5
+    S[-1, :] *= 0.5
+    S[:, 0] *= 0.5
+    S[:, -1] *= 0.5
+    S *= 1.0 / ((height - 1) * (width - 1))
+    
+    return T * S
 
 def get_lambda(n: int) -> np.ndarray:
-    """1D 노이만 경계조건 라플라스 연산자의 고유값 계산"""
-    i = np.arange(n, dtype=np.float32)
-    # 정밀도 유지를 위해 64비트 연산 후 32비트로 다운캐스팅
-    val = -4.0 * np.sin(i * np.pi / (2.0 * (n - 1))) ** 2
-    return val.astype(np.float32)
+    """1D 라플라스 연산자의 고유값을 반환합니다."""
+    i = np.arange(n, dtype=np.float64)
+    return -4.0 * np.sin(i * np.pi / (2.0 * (n - 1)))**2
 
-def make_compatible_boundary(F: np.ndarray) -> None:
-    """방정식 해가 존재하도록 우변 행렬의 경계 조건을 수정 (In-place 연산)"""
-    H, W = F.shape
+def make_compatible_boundary(F: np.ndarray) -> np.ndarray:
+    """해가 존재할 수 있도록 경계 조건을 호환되게 조정합니다."""
+    height, width = F.shape
+    F_adj = np.copy(F)
+    
+    # 복잡한 합산 로직을 가중치 행렬 곱셈으로 단일화하여 최적화
+    W = np.ones((height, width), dtype=np.float64)
+    W[0, :] *= 0.5
+    W[-1, :] *= 0.5
+    W[:, 0] *= 0.5
+    W[:, -1] *= 0.5
+    
+    total_sum = np.sum(F_adj * W)
+    add = -total_sum / (height + width - 3)
+    
+    # 경계값 갱신 (모서리가 중복 적용되지 않도록 슬라이싱 주의)
+    F_adj[0, :] += add
+    F_adj[-1, :] += add
+    F_adj[1:-1, 0] += add
+    F_adj[1:-1, -1] += add
+    
+    return F_adj
 
-    # 부동소수점 누적 오차를 최소화하기 위해 합산 과정에만 float64 사용
-    interior_sum = np.sum(F[1:-1, 1:-1], dtype=np.float64)
-    edges_x = np.sum(F[0, 1:-1], dtype=np.float64) + np.sum(F[-1, 1:-1], dtype=np.float64)
-    edges_y = np.sum(F[1:-1, 0], dtype=np.float64) + np.sum(F[1:-1, -1], dtype=np.float64)
-    corners = np.float64(F[0, 0] + F[0, -1] + F[-1, 0] + F[-1, -1])
-
-    total_sum = interior_sum + 0.5 * edges_x + 0.5 * edges_y + 0.25 * corners
-    add_val = np.float32(-total_sum / (H + W - 3))
-
-    F[0, :] += add_val
-    F[-1, :] += add_val
-    F[1:-1, 0] += add_val
-    F[1:-1, -1] += add_val
-
-def transform_normal2ev(A: np.ndarray, threads: int) -> np.ndarray:
-    """일반 공간에서 고유벡터 공간으로의 변환 (FFTW_REDFT00)"""
-    H, W = A.shape
-
-    # FFTW Type-1 2D DCT 수행
-    T = pyfftw.interfaces.scipy_fft.dctn(A, type=1, workers=threads).astype(np.float32)
-
-    # 전체 배열 스케일링
-    scale = np.float32(1.0 / ((H - 1) * (W - 1)))
-    T *= scale
-
-    # C++ 로직에 따른 경계 스케일링 
-    # (행/열 슬라이싱이 교차하는 모서리는 0.5가 두 번 곱해져 자동 0.25 처리됨)
-    T[:, 0] *= 0.5
-    T[:, -1] *= 0.5
-    T[0, :] *= 0.5
-    T[-1, :] *= 0.5
-
-    return T
-
-def transform_ev2normal(A: np.ndarray, threads: int) -> np.ndarray:
-    """고유벡터 공간에서 일반 공간으로의 역변환 (FFTW_REDFT00)"""
-    # 입력 배열 원본 보존
-    A_scaled = A.copy()
-
-    # 내부 스케일링
-    A_scaled[1:-1, 1:-1] *= 0.25
-
-    # 엣지 스케일링 (C++ 루프 구조에 맞춰 모서리는 스케일링에서 제외)
-    A_scaled[0, 1:-1] *= 0.5
-    A_scaled[-1, 1:-1] *= 0.5
-    A_scaled[1:-1, 0] *= 0.5
-    A_scaled[1:-1, -1] *= 0.5
-
-    # FFTW Type-1 2D DCT 수행
-    T = pyfftw.interfaces.scipy_fft.dctn(A_scaled, type=1, workers=threads).astype(np.float32)
-    return T
-
-def solve_pde_fftw(F: np.ndarray, adjust_bound: bool = True) -> np.ndarray:
-    """FFTW를 활용한 2D 푸아송 방정식 직접 해법"""
-    H, W = F.shape
-    threads = multiprocessing.cpu_count()
-
-    # SIMD(SSE/AVX) 가속 최적화를 위해 16/32바이트 정렬된 메모리에 배열 복사
-    F_aligned = pyfftw.empty_aligned((H, W), dtype=np.float32)
-    F_aligned[:] = F.astype(np.float32)
-
+def solve_pde_fft(F: np.ndarray, adjust_bound: bool = True, hpf_sigma: float = 0.0) -> np.ndarray:
+    """
+    노이만 경계 조건을 사용하여 2D Poisson 방정식을 계산합니다.
+    
+    Args:
+        F: 발산(Divergence) 행렬
+        adjust_bound: 경계 조건 호환성 조정 여부
+        hpf_sigma: 저주파 억제를 위한 High-Pass Filter 강도 (0.0 이면 적용 안 함)
+    """
+    height, width = F.shape
+    
     if adjust_bound:
-        make_compatible_boundary(F_aligned)
-
-    # 1. 고유벡터 공간으로의 직교 변환 (F_tr = EVy^-1 * F * (EVx^-1)^tr)
-    F_tr = transform_normal2ev(F_aligned, threads)
-
-    # 2. 고유값을 이용한 해 도출 (Broadcasting 활용)
-    ly = get_lambda(H)
-    lx = get_lambda(W)
-    denom = ly[:, np.newaxis] + lx[np.newaxis, :]
-
-    denom[0, 0] = 1.0  # ZeroDivision 방지 
-    F_tr /= denom
-    F_tr[0, 0] = 0.0   # 상수에 해당하는 해의 DC성분을 0으로 초기화
-
-    # 3. 고유벡터 공간에서 일반 공간으로 역변환 (U = EVy * F_tr * EVx^tr)
-    U = transform_ev2normal(F_tr, threads)
-
-    # 4. 행렬 내 양수 성분이 없도록 정규화
+        F = make_compatible_boundary(F)
+        
+    F_tr = transform_normal2ev(F)
+    
+    l1 = get_lambda(height)
+    l2 = get_lambda(width)
+    
+    # 브로드캐스팅을 사용한 고유값 매트릭스 생성
+    denom = l1[:, None] + l2[None, :]
+    
+    # 0으로 나누는 경고를 방지하고 분모가 0인 곳을 0으로 처리
+    with np.errstate(divide='ignore', invalid='ignore'):
+        F_tr = np.where(denom == 0, 0, F_tr / denom)
+        
+    F_tr[0, 0] = 0.0 # 상수를 결정하는 임의의 값 설정
+    
+    # --- 가우시안 High-Pass Filter 적용 ---
+    if hpf_sigma > 0.0:
+        ky = np.arange(height, dtype=np.float32) / height
+        kx = np.arange(width, dtype=np.float32) / width
+        
+        D2 = ky[:, np.newaxis]**2 + kx[np.newaxis, :]**2
+        H_filter = 1.0 - np.exp(-D2 / (2.0 * hpf_sigma**2))
+        
+        F_tr *= H_filter
+    # --------------------------------------
+        
+    U = transform_ev2normal(F_tr)
+    
+    # 최대값이 0이 되도록 정규화
     U -= np.max(U)
-
+    
     return U
 
 def residual_pde(U: np.ndarray, F: np.ndarray) -> float:
-    """해의 잔차(Residual) 오차 계산 (C++ 검증용 함수와 동일)"""
-    # 벡터화된 2D 라플라스 연산
+    """내부 포인트들에 대한 잔차(오차)의 L2 norm을 계산합니다."""
     laplace = (-4.0 * U[1:-1, 1:-1] + 
                U[:-2, 1:-1] + U[2:, 1:-1] + 
                U[1:-1, :-2] + U[1:-1, 2:])
-    
-    res = np.sum((laplace - F[1:-1, 1:-1]) ** 2)
+               
+    res = np.sum((laplace - F[1:-1, 1:-1])**2)
     return float(np.sqrt(res))

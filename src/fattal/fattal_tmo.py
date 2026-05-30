@@ -7,7 +7,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils import utils
-from fattal import pde_multigrid
+from fattal import pde_multigrid_multi_process
 from fattal import pde_fft
 
 
@@ -187,11 +187,11 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
         
         Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
         Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
-    else:
-        e = np.minimum(np.arange(w) + 1, w - 1)
-        s = np.minimum(np.arange(h) + 1, h - 1)
-        Gx = (H[:, e] - H) * FI
-        Gy = (H[s, :] - H) * FI
+    # else:
+    e = np.minimum(np.arange(w) + 1, w - 1)
+    s = np.minimum(np.arange(h) + 1, h - 1)
+    Gx = (H[:, e] - H) * FI
+    Gy = (H[s, :] - H) * FI
 
     #Gradient Clip=============================================
     # Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.0)
@@ -220,10 +220,10 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
 
     # PDE 풀이
     if fftsolver:
-        U = pde_fft.solve_pde_fftw(DivG)
+        U = pde_fft.solve_pde_fft(DivG, hpf_sigma = 0.007)
     else:
         U = np.zeros_like(DivG)
-        U = pde_multigrid.solve_pde_multigrid(DivG, U)
+        U = pde_multigrid_multi_process.solve_pde_multigrid(DivG, U)
 
     # 지수 공간으로 복원
     gamma = 1.0
@@ -310,22 +310,22 @@ def get_ideal_log_grad(Y, alfa, beta, noise, newfattal, fftsolver, detail_level)
     FI = calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal)
 
     # 기울기 감쇠
-    if fftsolver:
-        # y축 경계 인덱스 처리
-        yp1 = np.arange(1, h + 1)
-        yp1[-1] = h - 2
+    # if fftsolver:
+    #     # y축 경계 인덱스 처리
+    #     yp1 = np.arange(1, h + 1)
+    #     yp1[-1] = h - 2
         
-        # x축 경계 인덱스 처리
-        xp1 = np.arange(1, w + 1)
-        xp1[-1] = w - 2
+    #     # x축 경계 인덱스 처리
+    #     xp1 = np.arange(1, w + 1)
+    #     xp1[-1] = w - 2
         
-        Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
-        Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
-    else:
-        e = np.minimum(np.arange(w) + 1, w - 1)
-        s = np.minimum(np.arange(h) + 1, h - 1)
-        Gx = (H[:, e] - H) * FI
-        Gy = (H[s, :] - H) * FI
+    #     Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
+    #     Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
+    # else:
+    e = np.minimum(np.arange(w) + 1, w - 1)
+    s = np.minimum(np.arange(h) + 1, h - 1)
+    Gx = (H[:, e] - H) * FI
+    Gy = (H[s, :] - H) * FI
     
     # normalizing gradient================================= 기울기 정규화 <--- 안하는게 나음.
     #return Gx/H, Gy/H
@@ -338,17 +338,17 @@ def solving_pde(fftsolver, Gx, Gy):
     DivG[:, 1:] -= Gx[:, :-1]
     DivG[1:, :] -= Gy[:-1, :] # 0 padding 후 후방차분
 
-    if fftsolver:
-        DivG[:, 0] += Gx[:, 0]
-        DivG[0, :] += Gy[0, :]
+    # if fftsolver:
+    #     DivG[:, 0] += Gx[:, 0]
+    #     DivG[0, :] += Gy[0, :]
 
 
     # PDE 풀이
     if fftsolver:
-        U = pde_fft.solve_pde_fftw(DivG)
+        U = pde_fft.solve_pde_fftw(DivG,100000000)
     else:
         U = np.zeros_like(DivG)
-        U = pde_multigrid.solve_pde_multigrid(DivG, U)
+        U = pde_multigrid_multi_process.solve_pde_multigrid(DivG, U)
 
     # 지수 공간으로 복원
     gamma = 1.0
