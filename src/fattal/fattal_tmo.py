@@ -3,6 +3,7 @@ import scipy.fft as fft
 import cv2
 import sys
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -62,87 +63,71 @@ def upSample(A, target_shape):
     x_idx = np.clip(np.arange(tw) // 2, 0, aw - 1)
     return A[np.ix_(y_idx, x_idx)]
 
-#same
-def calculateGradients(H, k):
+def calculate_gradient_mag(H, k):
     h, w = H.shape
     divider = 2.0 ** (k + 1)
     
-    w_idx = np.maximum(np.arange(w) - 1, 0)
-    e_idx = np.minimum(np.arange(w) + 1, w - 1)
-    n_idx = np.maximum(np.arange(h) - 1, 0)
-    s_idx = np.minimum(np.arange(h) + 1, h - 1)
-
-    gx = (H[:, w_idx] - H[:, e_idx]) / divider
-    gy = (H[s_idx, :] - H[n_idx, :]) / divider
+    gx = np.empty_like(H)
+    gx[:, 0] = H[:, 0] - H[:, 1]
+    gx[:, -1] = H[:, -2] - H[:, -1]
+    gx[:, 1:-1] = H[:, :-2] - H[:, 2:]
+    gx /= divider
+    
+    gy = np.empty_like(H)
+    gy[0, :] = H[0, :] - H[1, :]
+    gy[-1, :] = H[-2, :] - H[-1, :]
+    gy[1:-1, :] = H[:-2, :] - H[2:, :]
+    gy /= divider
 
     G = np.sqrt(gx**2 + gy**2)
-    avgGrad = np.mean(G)
-    return G, avgGrad
+    return G
 
-def calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal):
+def calculate_attenuation(gradient,alfa,beta,noise):
+    avgGrad = np.mean(gradient)
+    grad_safe = np.maximum(gradient, 1e-4)
+    a = alfa * avgGrad
+    attenuation = ((grad_safe + noise) / a) ** (beta - 1.0)
+    return attenuation
+
+def calculate_level_attenuation(H, k, alfa, beta, noise):
+    G = calculate_gradient_mag(H, k)
+    attenuation = calculate_attenuation(G, alfa, beta, noise)
+
+    return attenuation
+
+def calculateFiMatrix(values, pyramids, nlevels, newfattal):
     """
-    C++의 분기 구조를 유지하면서 Numpy의 벡터화 연산을 통해 성능을 최적화한 구현체입니다.
-    외부에서 할당된 배열을 수정하는 대신, 계산이 완료된 최상위 배열을 반환합니다.
+    병렬 처리로 사전에 계산된 values 배열을 받아
+    순차적 의존성이 있는 FI 행렬 생성 및 업샘플링을 수행합니다.
     """
-    h, w = gradients[-1].shape
+    h, w = pyramids[-1].shape
     fi = [None] * nlevels
 
-    # C++: fi[nlevels - 1] = new pfs::Array2Df(width, height);
-    # C++: if (newfattal) { ... = 1.0f; }
-    # 효율성 최적화: 조건에 따라 메모리 할당과 초기화를 분리합니다.
     if newfattal:
         fi[-1] = np.ones((h, w), dtype=np.float32)
     else:
-        # newfattal == false인 경우 다음 루프에서 전체가 덮어씌워지므로
-        # np.zeros가 아닌 np.empty를 사용하여 할당 오버헤드를 제거합니다.
         fi[-1] = np.empty((h, w), dtype=np.float32) 
 
-    # C++: for (int k = nlevels - 1; k >= 0; k--)
     for k in range(nlevels - 1, -1, -1):
-        
-        # C++: if (k >= detail_level || k == nlevels - 1 || newfattal == false)
-        if k >= detail_level or k == nlevels - 1 or not newfattal:
-            
-            # C++의 이중 for 루프 내 픽셀 단위 연산을 Numpy 벡터 연산으로 완전히 대체합니다.
-            grad = gradients[k] 
-            
-            # C++: float grad = ((*gradients[k])(x, y) < 1e-4f) ? 1e-4 : (*gradients[k])(x, y);
-            # 효율성 최적화: 조건부 생성(np.where) 대신 고도로 최적화된 내부 함수(np.maximum)를 사용합니다.
-            grad_safe = np.maximum(grad, 1e-4)
-            
-            # C++: float value = powf((grad + noise) / a, beta - 1.0f);
-            a = alfa * avgGrads[k]
-            value = ((grad_safe + noise) / a) ** (beta - 1.0)
-            
-            # C++: if (newfattal) (*fi[k])(x, y) *= value;
-            # C++: else           (*fi[k])(x, y) = value;
+        if values[k] is not None:
             if newfattal:
-                fi[k] *= value  # 메모리 복사를 피하기 위한 In-place 곱셈 연산
+                fi[k] *= values[k]
             else:
-                fi[k] = value   # 새로운 배열 참조 할당
+                fi[k] = values[k]
                 
-        # C++: if (k > 1) { fi[k - 1] = new ... } else { fi[0] = &FI; }
-        # C++: if (k > 0 && newfattal) { upSample... gaussianBlur... }
-        # 파이썬의 특성에 맞게 두 분기를 병합하여 레벨 전이(Level Transition) 과정을 단순화합니다.
         if k > 0:
-            target_shape = gradients[k-1].shape
-            
+            target_shape = pyramids[k-1].shape
             if newfattal:
-                # 하위 레벨로의 업샘플링 및 블러 처리
                 up = upSample(fi[k], target_shape)
                 fi[k-1] = gaussianBlur(up)
             else:
-                # newfattal이 거짓일 경우, 다음 루프에서 fi[k] = value 구문을 통해 
-                # 배열 전체가 새롭게 덮어씌워지게 됩니다.
-                # 따라서 np.zeros 대신 할당 속도가 가장 빠른 np.empty를 사용합니다.
                 fi[k-1] = np.empty(target_shape, dtype=np.float32)
 
-    # C++에서는 FI 변수의 포인터를 교체하여 결과를 반환하지만,
-    # 파이썬에서는 로컬에서 완성된 최상위 피라미드 계층을 직접 반환하는 것이 가장 안전하고 빠릅니다.
     return fi[0]
 
 
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_weight):
+def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_weight, scanline_row=None):
+    utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
     detail_level = np.clip(detail_level, 0, 3)
     
@@ -151,8 +136,16 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
     minLum = np.min(Y)
     maxLum = np.max(Y)
 
+    if scanline_row is not None:
+        utils.save_scanline(Y, scanline_row, "1_original_HDR_Y")
+
     # 로그 공간 변환
     H = np.log(100.0 * Y / maxLum + 1e-4)
+    
+    if scanline_row is not None:
+        utils.save_scanline(H, scanline_row, "2_log_space_H")
+        
+    utils.print_elapsed("     [tmo] 로그 공간 변환 완료")
 
     # 가우시안 피라미드 구성 
     mins = min(w, h)
@@ -164,49 +157,62 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
     if nlevels == 0: nlevels = 1
 
     pyramids = createGaussianPyramids(H, nlevels)
+    utils.print_elapsed("     [tmo] 가우시안 피라미드 구성 완료")
 
-    gradients = []
-    avgGrads = []
-    for k in range(nlevels):
-        G, avg = calculateGradients(pyramids[k], k)
-        gradients.append(G)
-        avgGrads.append(avg)
+    # value 행렬 병렬 계산
+    attenuation = [None] * nlevels
+    with ThreadPoolExecutor(max_workers=nlevels) as executor:
+        futures = []
+        for k in range(nlevels):
+            if k >= detail_level or k == nlevels - 1 or not newfattal:
+                futures.append((k, executor.submit(calculate_level_attenuation, pyramids[k], k, alfa, beta, noise)))
+            else:
+                attenuation[k] = None
+                
+        for k, future in futures:
+            attenuation[k] = future.result()
 
     # FI 행렬 계산
-    FI = calculateFiMatrix(gradients, avgGrads, nlevels, detail_level, alfa, beta, noise, newfattal)
+    FI = calculateFiMatrix(attenuation, pyramids, nlevels, newfattal)
+    utils.print_elapsed("     [tmo] FI 행렬 및 그래디언트 계산 완료")
+
+    if scanline_row is not None:
+        if fftsolver:
+            Gx_un = np.empty_like(H)
+            Gx_un[:, :-1] = (H[:, 1:] - H[:, :-1]) * 0.5
+            Gx_un[:, -1] = (H[:, -2] - H[:, -1]) * 0.5
+            Gy_un = np.empty_like(H)
+            Gy_un[:-1, :] = (H[1:, :] - H[:-1, :]) * 0.5
+            Gy_un[-1, :] = (H[-2, :] - H[-1, :]) * 0.5
+            G_un = np.sqrt(Gx_un**2 + Gy_un**2)
+        else:
+            e = np.minimum(np.arange(w) + 1, w - 1)
+            s = np.minimum(np.arange(h) + 1, h - 1)
+            Gx_un = (H[:, e] - H)
+            Gy_un = (H[s, :] - H)
+            G_un = np.sqrt(Gx_un**2 + Gy_un**2)
+        utils.save_scanline(G_un, scanline_row, "3_original_gradient_magnitude")
 
     # 기울기 감쇠
     if fftsolver:
-        # y축 경계 인덱스 처리
-        yp1 = np.arange(1, h + 1)
-        yp1[-1] = h - 2
+        # Gx 계산 (가로 방향)
+        Gx = np.empty_like(H)
+        Gx[:, :-1] = (H[:, 1:] - H[:, :-1]) * 0.5 * (FI[:, 1:] + FI[:, :-1])
+        Gx[:, -1] = (H[:, -2] - H[:, -1]) * 0.5 * (FI[:, -2] + FI[:, -1])
         
-        # x축 경계 인덱스 처리
-        xp1 = np.arange(1, w + 1)
-        xp1[-1] = w - 2
-        
-        Gx = (H[:, xp1] - H) * 0.5 * (FI[:, xp1] + FI)
-        Gy = (H[yp1, :] - H) * 0.5 * (FI[yp1, :] + FI)
-    # else:
-    e = np.minimum(np.arange(w) + 1, w - 1)
-    s = np.minimum(np.arange(h) + 1, h - 1)
-    Gx = (H[:, e] - H) * FI
-    Gy = (H[s, :] - H) * FI
+        # Gy 계산 (세로 방향)
+        Gy = np.empty_like(H)
+        Gy[:-1, :] = (H[1:, :] - H[:-1, :]) * 0.5 * (FI[1:, :] + FI[:-1, :])
+        Gy[-1, :] = (H[-2, :] - H[-1, :]) * 0.5 * (FI[-2, :] + FI[-1, :])
+    else:
+        e = np.minimum(np.arange(w) + 1, w - 1)
+        s = np.minimum(np.arange(h) + 1, h - 1)
+        Gx = (H[:, e] - H) * FI
+        Gy = (H[s, :] - H) * FI
 
-    #Gradient Clip=============================================
-    # Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.0)
-    # Gx, Gy = utils.utils.clip_gradient_intensity(Gx, Gy, top_percentile=0.0)
-    #==========================================================
-
-    # gradient magnitude map의 hisgoram visualization======================================
-    # G_map = cv2.magnitude(Gx, Gy)
-    # utils.utils.plot_float_array_histogram(G_map)
-    # sys.exit()
-    #======================================================================================
-
-    # plot gradient map===================================================================
-    
-    #======================================================================================
+    if scanline_row is not None:
+        G_att = np.sqrt(Gx**2 + Gy**2)
+        utils.save_scanline(G_att, scanline_row, "4_attenuated_gradient_magnitude")
 
     # 다이버전스(발산) 계산
     DivG = Gx + Gy
@@ -216,35 +222,50 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, HE_we
     if fftsolver:
         DivG[:, 0] += Gx[:, 0]
         DivG[0, :] += Gy[0, :]
-
+    utils.print_elapsed("     [tmo] 다이버전스(발산) 계산 완료")
 
     # PDE 풀이
+    utils.print_elapsed("     [tmo] PDE 풀이 시작")
     if fftsolver:
-        U = pde_fft.solve_pde_fft(DivG, hpf_sigma = 0.007)
+        U = pde_fft.solve_pde_fft(DivG, hpf_sigma = 0.007) #0.007
     else:
         U = np.zeros_like(DivG)
         U = pde_multigrid.solve_pde_multigrid(DivG, U)
+    utils.print_elapsed("     [tmo] PDE 풀이 완료")
+
+    if scanline_row is not None:
+        utils.save_scanline(U, scanline_row, "5_before_exponential_U")
 
     # 지수 공간으로 복원
     gamma = 1.0
     L = np.exp(gamma * U)
 
-    # 백분위수 기반 정규화 (0.1% ~ 99.5%)
+    # 백분위수 기반 정규화 (0.1% ~ 99.5%) - ThreadPoolExecutor 병렬 연산
     cut_min = 0.01 * 0.1
     cut_max = 1.0 - 0.01 * 0.5
-    min_val = np.percentile(L, cut_min * 100)
-    max_val = np.percentile(L, cut_max * 100)
+    
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_min = executor.submit(np.percentile, L, cut_min * 100)
+        future_max = executor.submit(np.percentile, L, cut_max * 100)
+        min_val = future_min.result()
+        max_val = future_max.result()
 
     L = (L - min_val) / (max_val - min_val)
-    #L = np.maximum(L, 0.0)
     L = np.clip(L, 0, 1)
 
-    #histogram equalizaiton before quantaization
-    L = utils.exact_continuous_he(L, HE_weight)
+    # exact_continuous_he 내부 혹은 호출부 수정 제안
+    if HE_weight > 0.0:
+        L = utils.exact_continuous_he(L, HE_weight)
+        
+    if scanline_row is not None:
+        utils.save_scanline(L, scanline_row, "6_final_LDR_L")
+        
+    utils.print_elapsed("     [tmo] 히스토그램 평활화 및 정규화 완료")
     
     return L
 
-def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, newfattal, fftsolver, detail_level, HE_weight):
+def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, newfattal, fftsolver, detail_level, HE_weight, scanline_row=None):
+    utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
     if fftsolver:
         newfattal = True
 
@@ -254,15 +275,21 @@ def pfstmo_fattal02(R, G, B, opt_alpha, opt_beta, opt_saturation, opt_noise, new
     # RGB to Y 변환 (Rec. 709 휘도 계수 사용)
     Yr = 0.2126 * R + 0.7152 * G + 0.0722 * B
     
-    L = tmo_fattal02(Yr, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, HE_weight)
+    L = tmo_fattal02(Yr, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, HE_weight, scanline_row)
+    utils.print_elapsed("   [pfstmo] tmo_fattal02 연산 완료")
 
     epsilon = 1e-4
     Y_safe = np.maximum(Yr, epsilon)
     L_safe = np.maximum(L, epsilon)
 
+    # RGB image
     # RGB 채널 재결합 (채도 복원)
-    R_out = np.power(np.maximum(R / Y_safe, 0.0), opt_saturation) * L_safe
-    G_out = np.power(np.maximum(G / Y_safe, 0.0), opt_saturation) * L_safe
-    B_out = np.power(np.maximum(B / Y_safe, 0.0), opt_saturation) * L_safe
+    # R_out = np.power(np.maximum(R / Y_safe, 0.0), opt_saturation) * L_safe
+    # G_out = np.power(np.maximum(G / Y_safe, 0.0), opt_saturation) * L_safe
+    # B_out = np.power(np.maximum(B / Y_safe, 0.0), opt_saturation) * L_safe
+    
+    # Gray scale image and opt_saturation = 1
+    Gray_out = np.maximum(R / Y_safe,0) * L_safe
+    utils.print_elapsed("   [pfstmo] 채도 복원 완료 및 반환")
 
-    return R_out, G_out, B_out
+    return Gray_out, Gray_out, Gray_out

@@ -140,3 +140,133 @@ def get_top_percentile_threshold(Gx, Gy, top_percentile=0.5):
     threshold = np.percentile(magnitude, 100.0 - top_percentile)
     
     return threshold
+
+# 글로벌 타이머 전역 변수 및 헬퍼 함수
+_start_time = None
+
+def start_timer():
+    global _start_time
+    import time
+    _start_time = time.perf_counter()
+
+def print_elapsed(label):
+    global _start_time
+    import time
+    if _start_time is None:
+        _start_time = time.perf_counter()
+    elapsed = time.perf_counter() - _start_time
+    print(f"{label} : {elapsed:.6f}s")
+
+
+def save_scanline(image, row_index, stage_name, save_dir="scanlines"):
+    """
+    특정 행(row)의 스캔라인을 추출하여 그래프(PNG)와 데이터(NPY)로 저장합니다. (OpenCV 사용)
+    
+    Args:
+        image (np.ndarray): 스캔라인을 추출할 2D 배열 이미지
+        row_index (int): 스캔라인을 추출할 행의 인덱스
+        stage_name (str): 파일명과 그래프 제목에 들어갈 단계 이름
+        save_dir (str): 파일들이 저장될 디렉토리 (기본값: "scanlines")
+    """
+    import os
+    import cv2
+    import numpy as np
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    # 행 인덱스가 이미지 범위를 벗어나지 않도록 클리핑
+    h = image.shape[0]
+    row_index = np.clip(row_index, 0, h - 1)
+    
+    scanline = image[row_index, :]
+    
+    # 데이터는 npy 파일로 우선 저장
+    safe_stage_name = stage_name.replace(" ", "_").replace("/", "_")
+    file_path_npy = os.path.join(save_dir, f"scanline_row{row_index}_{safe_stage_name}.npy")
+    np.save(file_path_npy, scanline)
+    
+    # OpenCV를 이용한 그래프 그리기
+    # 캔버스 크기 정의 (높이 500, 너비 1200)
+    canvas_h, canvas_w = 500, 1200
+    # 흰색 배경의 3채널(BGR) 캔버스 생성
+    canvas = np.ones((canvas_h, canvas_w, 3), dtype=np.uint8) * 255
+    
+    # 여백 설정
+    margin_left = 80
+    margin_right = 40
+    margin_top = 60
+    margin_bottom = 60
+    
+    plot_w = canvas_w - margin_left - margin_right
+    plot_h = canvas_h - margin_top - margin_bottom
+    
+    # 최소값, 최대값 계산
+    s_min = float(np.min(scanline))
+    s_max = float(np.max(scanline))
+    s_range = s_max - s_min
+    if s_range == 0:
+        s_range = 1.0
+        
+    # 1. 축 그리기 (검정색)
+    # X축 (하단)
+    cv2.line(canvas, (margin_left, canvas_h - margin_bottom), (canvas_w - margin_right, canvas_h - margin_bottom), (0, 0, 0), 2)
+    # Y축 (좌측)
+    cv2.line(canvas, (margin_left, margin_top), (margin_left, canvas_h - margin_bottom), (0, 0, 0), 2)
+    
+    # 2. 격자선(Grid) 및 눈금 텍스트 그리기 (회색)
+    num_y_div = 5
+    for i in range(num_y_div + 1):
+        # Y축 좌표 계산
+        y_val = s_min + (s_range * i / num_y_div)
+        y_pos = canvas_h - margin_bottom - int((i / num_y_div) * plot_h)
+        
+        # 격자선 그리기 (Y축 기준 가로선)
+        if i > 0 and i < num_y_div:
+            cv2.line(canvas, (margin_left, y_pos), (canvas_w - margin_right, y_pos), (220, 220, 220), 1)
+            
+        # 눈금 라벨 그리기 (소수점 4자리까지)
+        label = f"{y_val:.4f}"
+        # 라벨 텍스트의 크기 구하기
+        (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+        cv2.putText(canvas, label, (margin_left - text_w - 8, y_pos + text_h // 2), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (50, 50, 50), 1, cv2.LINE_AA)
+                    
+    num_x_div = 10
+    total_cols = len(scanline)
+    for i in range(num_x_div + 1):
+        col_idx = int((total_cols - 1) * i / num_x_div)
+        x_pos = margin_left + int((i / num_x_div) * plot_w)
+        
+        # 격자선 그리기 (X축 기준 세로선)
+        if i > 0 and i < num_x_div:
+            cv2.line(canvas, (x_pos, margin_top), (x_pos, canvas_h - margin_bottom), (220, 220, 220), 1)
+            
+        # 눈금 라벨 그리기
+        label = str(col_idx)
+        (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+        cv2.putText(canvas, label, (x_pos - text_w // 2, canvas_h - margin_bottom + text_h + 8), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (50, 50, 50), 1, cv2.LINE_AA)
+                    
+    # 3. 데이터 플롯 그리기 (파란색 실선)
+    points = []
+    for col_idx, val in enumerate(scanline):
+        x = margin_left + int((col_idx / (total_cols - 1)) * plot_w)
+        y = (canvas_h - margin_bottom) - int(((val - s_min) / s_range) * plot_h)
+        points.append((x, y))
+        
+    for i in range(len(points) - 1):
+        cv2.line(canvas, points[i], points[i+1], (255, 0, 0), 2, cv2.LINE_AA)
+        
+    # 4. 타이틀 및 통계 정보 그리기
+    title_text = f"Scanline Intensity at Row {row_index} - {stage_name}"
+    cv2.putText(canvas, title_text, (margin_left, margin_top - 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2, cv2.LINE_AA)
+                
+    info_text = f"Min: {s_min:.6f}  Max: {s_max:.6f}  Width: {total_cols}"
+    (text_w, text_h), baseline = cv2.getTextSize(info_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+    cv2.putText(canvas, info_text, (canvas_w - margin_right - text_w, margin_top - 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1, cv2.LINE_AA)
+                
+    file_path_png = os.path.join(save_dir, f"scanline_row{row_index}_{safe_stage_name}.png")
+    cv2.imwrite(file_path_png, canvas)
+    print(f"[{stage_name}] Scanline at row {row_index} saved to {save_dir} (OpenCV version).")

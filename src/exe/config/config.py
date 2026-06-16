@@ -6,10 +6,11 @@ from pathlib import Path
 current_file = Path(__file__).resolve()
 project_root = current_file.parents[3]
 data_path = project_root / "data" 
+test_path = project_root / "test"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "4")
-OUTPUT_DIR = str(data_path / "test")
+INPUT_DIR = str(data_path / "data_one" / "5")
+OUTPUT_DIR = str(test_path/ "tmp_4")
 
 # ─── 파라미터 자동 생성 설정 ───────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -24,11 +25,11 @@ he_range = np.round(np.arange(0.0, 0.2, 0.03), 2).tolist()
 
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
-    'opt_alpha': [0.9],
-    'opt_beta': [0.86],
+    'opt_alpha': [0.3],
+    'opt_beta': [0.93],
     'opt_noise': [0.001],
     'newfattal': [True],
-    'fftsolver': [False],
+    'fftsolver': [True],
     'detail_level': [0],
     'HE_weight': [0.0],
     'pre_gamma': [1.0],

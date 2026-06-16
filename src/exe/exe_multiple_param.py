@@ -15,9 +15,12 @@ from processing.gamma_correction import Frame, apply_gamma_frame
 # 파라미터 및 설정 불러오기
 from config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
-start_time = time.perf_counter()
+import utils.utils as utils
 
 def main():
+    utils.start_timer()
+    utils.print_elapsed("시작")
+    
     # 출력 디렉토리가 존재하지 않으면 생성합니다.
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
@@ -34,6 +37,7 @@ def main():
     param_combinations = get_parameter_combinations()
     total_tasks = len(hdr_files) * len(param_combinations)
     
+    utils.print_elapsed("구간 1 (환경 설정 및 파일 탐색 완료)")
     print(f"총 {len(hdr_files)}개의 이미지와 {len(param_combinations)}개의 파라미터 조합이 감지되었습니다.")
     print(f"총 {total_tasks}회의 톤 매핑 작업이 시작됩니다.\n")
 
@@ -59,6 +63,8 @@ def main():
         G = img_rgb[:, :, 1]
         B = img_rgb[:, :, 2]
 
+        utils.print_elapsed(f"구간 2 (이미지 로드 및 전처리 완료) - 대상: {file_name}")
+
         # 3. 각 파라미터 조합에 대하여 반복 실행
         for p in param_combinations:
             he_weight_clipped = np.clip(p['HE_weight'], 0, 1)
@@ -78,8 +84,11 @@ def main():
             R_out, G_out, B_out = pfstmo_fattal02(
                 R_pre, G_pre, B_pre,
                 p['opt_alpha'], p['opt_beta'], opt_saturation, p['opt_noise'],
-                p['newfattal'], p['fftsolver'], p['detail_level'], he_weight_clipped
+                p['newfattal'], p['fftsolver'], p['detail_level'], he_weight_clipped, scanline_row=1182
             )
+
+            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_he{he_weight_clipped}_pre{p['pre_gamma']}_post{p['post_gamma']}"
+            utils.print_elapsed(f"구간 3 (톤 매핑 연산 완료) - 파라미터: {param_suffix}")
 
             # 후처리 감마 보정
             post_frame = Frame(R_out, G_out, B_out)
@@ -99,19 +108,18 @@ def main():
             if is_grayscale:
                 out_img_bgr = out_img_bgr[:, :, 0]
 
+            utils.print_elapsed("구간 4 (후처리 완료)")
+
             # 식별 가능한 파일명 생성 및 저장
             # 주요 파라미터를 파일명에 포함하여 덮어쓰기를 방지하고 결과를 구분합니다.
-            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_he{he_weight_clipped}_pre{p['pre_gamma']}_post{p['post_gamma']}"
             save_name = f"{file_name}_{param_suffix}.png"
             save_path = os.path.join(OUTPUT_DIR, save_name)
 
             cv2.imwrite(save_path, out_img_bgr)
             print(f"완료: {save_path}")
+            utils.print_elapsed("구간 5 (파일 저장 완료)")
     
-    end_time = time.perf_counter()
-    execution_time = end_time - start_time
-    print(f"실행 시간: {execution_time:.6f} 초")
-    print("\n모든 작업이 종료되었습니다.")
+    utils.print_elapsed("프로그램 전체 종료")
 
 if __name__ == "__main__":
     main()

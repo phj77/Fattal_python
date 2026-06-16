@@ -2,6 +2,7 @@ import numpy as np
 import pyfftw
 import pyfftw.interfaces.scipy_fft as fftw_fft
 import multiprocessing
+from utils import utils
 
 # 연산 속도 최적화를 위해 PyFFTW 캐시를 활성화하고, 가용한 최대 스레드를 할당합니다.
 pyfftw.interfaces.cache.enable()
@@ -22,7 +23,7 @@ def transform_ev2normal(A: np.ndarray) -> np.ndarray:
     A_scaled = A * S
     
     # FFTW_REDFT00에 대응하는 DCT-I (type=1) 실행
-    T = fftw_fft.dctn(A_scaled, type=1, norm=None).astype(np.float32)
+    T = fftw_fft.dctn(A_scaled, type=1, norm=None, workers=10).astype(np.float32)
     return T
 
 def transform_normal2ev(A: np.ndarray) -> np.ndarray:
@@ -30,7 +31,7 @@ def transform_normal2ev(A: np.ndarray) -> np.ndarray:
     height, width = A.shape
     
     # 2D DCT-I 실행
-    T = fftw_fft.dctn(A, type=1, norm=None).astype(np.float32)
+    T = fftw_fft.dctn(A, type=1, norm=None, workers=10).astype(np.float32)
     
     # 출력 매트릭스 스케일링
     S = np.ones((height, width), dtype=np.float32)
@@ -79,12 +80,15 @@ def solve_pde_fft(F: np.ndarray, adjust_bound: bool = True, hpf_sigma: float = 0
         adjust_bound: 경계 조건 호환성 조정 여부
         hpf_sigma: 저주파 억제를 위한 High-Pass Filter 강도 (0.0 이면 적용 안 함)
     """
+    utils.print_elapsed("       [fft_solve] 시작")
     height, width = F.shape
     
     if adjust_bound:
         F = make_compatible_boundary(F)
+        utils.print_elapsed("       [fft_solve] 경계 조건 호환성 조정 완료")
         
     F_tr = transform_normal2ev(F)
+    utils.print_elapsed("       [fft_solve] normal2ev 변환 완료")
     
     l1 = get_lambda(height)
     l2 = get_lambda(width)
@@ -108,11 +112,13 @@ def solve_pde_fft(F: np.ndarray, adjust_bound: bool = True, hpf_sigma: float = 0
         
         F_tr *= H_filter
     # --------------------------------------
+    utils.print_elapsed("       [fft_solve] 고유값 및 HPF 필터 연산 완료")
         
     U = transform_ev2normal(F_tr)
     
     # 최대값이 0이 되도록 정규화
     U -= np.max(U)
+    utils.print_elapsed("       [fft_solve] ev2normal 역변환 및 U 정규화 완료")
     
     return U
 
