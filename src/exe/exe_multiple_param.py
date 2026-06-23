@@ -81,10 +81,13 @@ def main():
             B_pre = pre_frame.z_channel.data
 
             # 톤 매핑
+            highlight_ranges = [[1295, 1360],[2570, 2650]]
+            highlight_ranges = None
             R_out, G_out, B_out = pfstmo_fattal02(
                 R_pre, G_pre, B_pre,
                 p['opt_alpha'], p['opt_beta'], opt_saturation, p['opt_noise'],
-                p['newfattal'], p['fftsolver'], p['detail_level'], he_weight_clipped, scanline_row=1182
+                p['newfattal'], p['fftsolver'], p['detail_level'], he_weight_clipped, 
+                scanline_row=None, highlight_ranges=highlight_ranges
             )
 
             param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_he{he_weight_clipped}_pre{p['pre_gamma']}_post{p['post_gamma']}"
