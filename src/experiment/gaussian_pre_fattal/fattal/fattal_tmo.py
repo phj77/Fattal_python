@@ -5,14 +5,47 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from utils import utils
 from fattal import pde_multigrid
 from fattal import pde_fft
 
 
-#same
+def apply_gaussian_blur(img: np.ndarray, pre_gaussian_sigma: float = 0.007) -> np.ndarray:
+    """
+    Original 이미지에 Gaussian Blur를 먼저 적용합니다.
+    
+    Args:
+        img (np.ndarray): 입력 2D 이미지 (단일 채널)
+        pre_gaussian_sigma (float): Gaussian Blur 표준편차/강도 (0 이하일 경우 필터 미적용)
+        
+    Returns:
+        np.ndarray: Gaussian Blur가 적용된 이미지
+    """
+    if pre_gaussian_sigma <= 0.0:
+        return img.copy()
+
+    utils.print_elapsed(f"   [Pre-Gaussian] Gaussian Blur 적용 시작 (sigma_ratio={pre_gaussian_sigma})")
+    h, w = img.shape
+    sigma_spatial = pre_gaussian_sigma * max(h, w)
+    if sigma_spatial < 0.5:
+        sigma_spatial = 0.5
+
+    ksize = int(np.ceil(sigma_spatial * 3) * 2 + 1)
+    ksize = max(3, ksize)
+    if ksize % 2 == 0:
+        ksize += 1
+
+    blurred = cv2.GaussianBlur(img.astype(np.float32), (ksize, ksize), sigmaX=sigma_spatial, sigmaY=sigma_spatial)
+
+    utils.print_elapsed("   [Pre-Gaussian] Gaussian Blur 적용 완료")
+    return blurred
+
+
 def gaussianBlur(I):
     h, w = I.shape
     if w < 3 or h < 3:
@@ -32,40 +65,35 @@ def gaussianBlur(I):
 
     return L
 
-#same; Gaussian pyramid 만들때 avg pooling, blur를 둘 다 사용할 필요 있나?
+
 def downSample(A):
-    # Original in LuminanceHDR
     h, w = A.shape
     nh, nw = h // 2, w // 2
     B = (A[0:2*nh:2, 0:2*nw:2] + A[1:2*nh:2, 0:2*nw:2] + 
          A[0:2*nh:2, 1:2*nw:2] + A[1:2*nh:2, 1:2*nw:2]) * 0.25
-
-    # downsample by sampling
-    # B = A[::2, ::2]
     return B
 
-#new!
+
 def createGaussianPyramids(H, n_pyramid_levels):
-    """C++의 createGaussianPyramids를 정확히 재현"""
     pyramids = [H]
-    L = gaussianBlur(H)  # 먼저 블러
+    L = gaussianBlur(H)
 
     for k in range(1, n_pyramid_levels):
-        down = downSample(L)          # 블러된 이미지를 다운샘플
+        down = downSample(L)
         pyramids.append(down)
         if k < n_pyramid_levels - 1:
-            L = gaussianBlur(down)    # 다음 레벨을 위해 블러
-        # 마지막 레벨은 추가 blur 불필요 (다음 단계 없음)
+            L = gaussianBlur(down)
 
     return pyramids
 
-#same
+
 def upSample(A, target_shape):
     th, tw = target_shape
     ah, aw = A.shape
     y_idx = np.clip(np.arange(th) // 2, 0, ah - 1)
     x_idx = np.clip(np.arange(tw) // 2, 0, aw - 1)
     return A[np.ix_(y_idx, x_idx)]
+
 
 def calculate_gradient_mag(H, k):
     h, w = H.shape
@@ -86,29 +114,22 @@ def calculate_gradient_mag(H, k):
     G = np.sqrt(gx**2 + gy**2)
     return G
 
-def calculate_scaling_factor(gradient,alfa,beta,noise):
-    avgGrad = np.mean(gradient)
-    a = alfa * avgGrad
-    # [바꾸기 전 버전]
-    # grad_safe = np.maximum(gradient, 1e-4)
-    # scaling_factor = ((grad_safe + noise) / a) ** (beta - 1.0)
 
-    mask = gradient > 0
-    safe_grad = np.where(mask, gradient, 1.0)  # 0인 곳은 더미값 1.0 (0^음수 power 연산 오류 방지)
-    scaling_factor = np.where(mask, ((safe_grad + noise) / a) ** (beta - 1.0), 0.0)
+def calculate_scaling_factor(gradient, alfa, beta, noise):
+    avgGrad = np.mean(gradient)
+    grad_safe = np.maximum(gradient, 1e-4)
+    a = alfa * avgGrad
+    scaling_factor = ((grad_safe + noise) / a) ** (beta - 1.0)
     return scaling_factor
+
 
 def calculate_level_scaling_factor(H, k, alfa, beta, noise):
     G = calculate_gradient_mag(H, k)
     scaling_factor = calculate_scaling_factor(G, alfa, beta, noise)
-
     return scaling_factor
 
+
 def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal):
-    """
-    병렬 처리로 사전에 계산된 scaling_factor 배열을 받아
-    순차적 의존성이 있는 attenuation 행렬 생성 및 업샘플링을 수행합니다.
-    """
     h, w = pyramids[-1].shape
     attenuation = [None] * n_pyramid_levels
 
@@ -138,10 +159,8 @@ def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
 def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007):
     utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
-    #detail_level = np.clip(detail_level, 0, 3) #detail level 이상의 피라미드 층만 감쇠 함수를 연산함.
     
-    #TOP_SIZE = 2**8 if fftsolver else 32
-    TOP_SIZE = 2**3 if fftsolver else 32 # originally, TOP_SIZE = 8
+    TOP_SIZE = 2**3 if fftsolver else 32
 
     minLum = np.min(Y)
     maxLum = np.max(Y)
@@ -199,7 +218,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
     # 다이버전스(발산) 계산
     DivG = Gx + Gy
     DivG[:, 1:] -= Gx[:, :-1]
-    DivG[1:, :] -= Gy[:-1, :] # 0 padding 후 후방차분
+    DivG[1:, :] -= Gy[:-1, :]
 
     if fftsolver:
         DivG[:, 0] += Gx[:, 0]
@@ -232,19 +251,24 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
     L = (L - min_val) / (max_val - min_val)
     L = np.clip(L, 0, 1)
 
-    utils.print_elapsed("     [tmo] 정규화 완료")
+    utils.print_elapsed("     [tmo] 히스토그램 평활화 및 정규화 완료")
     
     return L
 
-def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007):
-    utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
+
+def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pre_gaussian_sigma=0.007):
+    utils.print_elapsed("   [pfstmo] 시작")
     if fftsolver:
         newfattal = True
 
     if opt_noise <= 0.0:
         opt_noise = opt_alpha * 0.01
 
-    L = tmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=hpf_sigma)
+    # 1. Original 이미지에 Gaussian Blur 먼저 적용
+    img_filtered = apply_gaussian_blur(img, pre_gaussian_sigma=pre_gaussian_sigma)
+
+    # 2. Fattal TMO 알고리즘 실행
+    L = tmo_fattal02(img_filtered, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=hpf_sigma)
     utils.print_elapsed("   [pfstmo] tmo_fattal02 연산 완료")
 
     return L

@@ -1,4 +1,4 @@
-# exe_multiple_param.py
+# exe_dithering.py
 import cv2
 import numpy as np
 import os
@@ -6,13 +6,13 @@ import glob
 import sys
 import time
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# 사용자 정의 모듈 (환경에 맞게 존재해야 함)
-from fattal.fattal_tmo import pfstmo_fattal02
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) # src/experiment
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))) # src
+# 사용자 정의 모듈 (현재 실험 환경의 모듈 사용)
+from dithering.fattal.fattal_tmo import pfstmo_fattal02
 
 # 파라미터 및 설정 불러오기
-from config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from dithering.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 import utils.utils as utils
 
@@ -61,22 +61,24 @@ def main():
 
         # 3. 각 파라미터 조합에 대하여 반복 실행
         for p in param_combinations:
-            # 톤 매핑 연산 (감마 보정 없이 1채널 이미지를 pfstmo_fattal02에 전달)
+            pre_hpf_sigma = p.get('pre_hpf_sigma', 0.010)
+            dither_strength = p.get('dither_strength', 0.0)
             L_out = pfstmo_fattal02(
                 img_single,
                 p['opt_alpha'], p['opt_beta'], p['opt_noise'],
                 p['newfattal'], p['fftsolver'], p['detail_level'],
-                hpf_sigma=p.get('hpf_sigma', 0.007)
+                hpf_sigma=p.get('hpf_sigma', 0.007),
+                pre_hpf_sigma=pre_hpf_sigma,
+                dither_strength=dither_strength
             )
 
-            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}"
+            param_suffix = f"preHPF{pre_hpf_sigma}_a{p['opt_alpha']}_b{p['opt_beta']}_ds{dither_strength}"
             utils.print_elapsed(f"구간 3 (톤 매핑 연산 완료) - 파라미터: {param_suffix}")
 
-            # 포맷 변환 및 클리핑 (8bit 단일 채널 이미지)
-            out_img = np.clip(L_out, 0.0, 1.0)
-            out_img_8bit = (out_img * 255.0).astype(np.uint8)
+            # 포맷 변환 (8bit 단일 채널 이미지)
+            out_img_8bit = (L_out * 255.0).astype(np.uint8)
 
-            utils.print_elapsed("구간 4 (후처리 완료)")
+            utils.print_elapsed("구간 4 (디더링 및 후처리 완료)")
 
             # 식별 가능한 파일명 생성 및 저장
             save_name = f"{file_name}_{param_suffix}.png"

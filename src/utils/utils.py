@@ -158,7 +158,7 @@ def print_elapsed(label):
     print(f"{label} : {elapsed:.6f}s")
 
 
-def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=None):
+def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=None, ylim=None):
     """
     특정 행(row)의 스캔라인을 추출하여 고해상도(Fine) 그래프(PNG)와 데이터(NPY)로 저장합니다. (matplotlib 사용)
     
@@ -195,7 +195,7 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
     fig, ax = plt.subplots(figsize=(16, 6), dpi=300)
     
     # 얇고 세밀한 파란색 라인으로 플롯
-    ax.plot(scanline, color='#1f77b4', linewidth=0.8, alpha=0.9, label='Intensity')
+    ax.plot(scanline, color='black', linewidth=0.5, alpha=1)
     
     # 구간 하이라이팅 (axvspan 사용)
     has_highlight = False
@@ -205,8 +205,7 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
                 start, end = rng
                 start = max(0, min(start, len(scanline) - 1))
                 end = max(0, min(end, len(scanline) - 1))
-                label = f"Highlight [{start}-{end}]"
-                ax.axvspan(start, end, color='#ffa500', alpha=0.25, label=label)
+                ax.axvspan(start, end, color='#ffa500', alpha=0.25)
                 has_highlight = True
                 
     # 타이틀 및 라벨 설정
@@ -228,13 +227,13 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
     s_mean = np.mean(scanline)
     stats_text = f"Min: {s_min:.6f}\nMax: {s_max:.6f}\nMean: {s_mean:.6f}"
     
-    # 축 범위 여유 설정 (값의 상하 여백 5%)
-    y_margin = (s_max - s_min) * 0.05 if s_max > s_min else 1.0
-    ax.set_ylim(s_min - y_margin, s_max + y_margin)
+    # 축 범위 여유 설정 (값의 상하 여백 5% 혹은 지정된 ylim)
+    if ylim is not None:
+        ax.set_ylim(ylim[0], ylim[1])
+    else:
+        y_margin = (s_max - s_min) * 0.05 if s_max > s_min else 1.0
+        ax.set_ylim(s_min - y_margin, s_max + y_margin)
     ax.set_xlim(0, len(scanline) - 1)
-    
-    # 범례 설정 (하이라이트 또는 데이터 라벨이 있을 경우 표시)
-    ax.legend(loc='upper left', frameon=True, facecolor='#ffffff', edgecolor='#cccccc')
     
     # 통계 텍스트 상자 배치
     ax.text(0.98, 0.95, stats_text, transform=ax.transAxes, verticalalignment='top', horizontalalignment='right',
@@ -254,3 +253,99 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
     file_path_npy = os.path.join(save_dir, f"scanline_row{row_index}_{safe_stage_name}.npy")
     np.save(file_path_npy, scanline)
     print(f"[{stage_name}] Scanline at row {row_index} saved to {save_dir}.")
+
+
+def save_vertical_scanline(image, col_index, stage_name, highlight_ranges=None, save_dir=None, ylim=None):
+    """
+    특정 열(column)의 세로 방향 스캔라인을 추출하여 고해상도(Fine) 그래프(PNG)와 데이터(NPY)로 저장합니다.
+    
+    Args:
+        image (np.ndarray): 스캔라인을 추출할 2D 배열 이미지
+        col_index (int): 스캔라인을 추출할 열의 인덱스
+        stage_name (str): 파일명과 그래프 제목에 들어갈 단계 이름
+        highlight_ranges (list of lists/tuples): 하이라이트할 Row Index 구간들의 리스트 (예: [[206, 328], [1716, 1815]])
+        save_dir (str, optional): 저장할 디렉토리 경로.
+    """
+    import os
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import AutoMinorLocator
+    import numpy as np
+    
+    if save_dir is None:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))  # Fattal_python 폴더
+        save_dir = os.path.join(project_root, "test", "scanline", "scanline_vertical")
+        
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    # 열 인덱스가 이미지 범위를 벗어나지 않도록 클리핑
+    h, w = image.shape[:2]
+    col_index = np.clip(col_index, 0, w - 1)
+    
+    # 세로 방향이므로 col_index를 고정하고 모든 행(row)을 선택
+    scanline = image[:, col_index]
+    
+    # 캔버스 및 서브플롯 설정 (넓고 크게 설정, 고해상도 300 dpi)
+    fig, ax = plt.subplots(figsize=(16, 6), dpi=300)
+    
+    # 검은색 라인으로 플롯
+    ax.plot(scanline, color='black', linewidth=0.5, alpha=1)
+    
+    # 구간 하이라이팅 (axvspan 사용)
+    has_highlight = False
+    if highlight_ranges is not None:
+        for rng in highlight_ranges:
+            if len(rng) == 2:
+                start, end = rng
+                start = max(0, min(start, len(scanline) - 1))
+                end = max(0, min(end, len(scanline) - 1))
+                ax.axvspan(start, end, color='#ffa500', alpha=0.25)
+                has_highlight = True
+                
+    # 타이틀 및 라벨 설정
+    ax.set_title(f"Scanline Intensity at Column {col_index} - {stage_name}", fontsize=14, pad=15, fontweight='bold')
+    ax.set_xlabel("Row Index (Y)", fontsize=11, labelpad=8)
+    ax.set_ylabel("Intensity (Y)", fontsize=11, labelpad=8)
+    
+    # 보조 눈금(Minor Ticks) 자동 생성 활성화
+    ax.xaxis.set_minor_locator(AutoMinorLocator())
+    ax.yaxis.set_minor_locator(AutoMinorLocator())
+    
+    # 주 그리드(Major Grid)와 보조 그리드(Minor Grid)를 각각 다르게 렌더링
+    ax.grid(True, which='major', color='#d3d3d3', linestyle='-', linewidth=0.6)
+    ax.grid(True, which='minor', color='#e5e5e5', linestyle=':', linewidth=0.4)
+    
+    # 통계 정보(Min, Max, Mean) 박스를 우측 상단에 표시
+    s_min = np.min(scanline)
+    s_max = np.max(scanline)
+    s_mean = np.mean(scanline)
+    stats_text = f"Min: {s_min:.6f}\nMax: {s_max:.6f}\nMean: {s_mean:.6f}"
+    
+    # 축 범위 여유 설정
+    if ylim is not None:
+        ax.set_ylim(ylim[0], ylim[1])
+    else:
+        y_margin = (s_max - s_min) * 0.05 if s_max > s_min else 1.0
+        ax.set_ylim(s_min - y_margin, s_max + y_margin)
+    ax.set_xlim(0, len(scanline) - 1)
+    
+    # 통계 텍스트 상자 배치
+    ax.text(0.98, 0.95, stats_text, transform=ax.transAxes, verticalalignment='top', horizontalalignment='right',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffffff', edgecolor='#cccccc', alpha=0.8),
+            fontsize=9, family='monospace')
+            
+    # 레이아웃 최적화
+    plt.tight_layout()
+    
+    # 특수문자나 공백이 있을 수 있으니 안전한 파일명으로 처리
+    safe_stage_name = stage_name.replace(" ", "_").replace("/", "_")
+    
+    file_path_png = os.path.join(save_dir, f"scanline_col{col_index}_{safe_stage_name}.png")
+    plt.savefig(file_path_png, dpi=300)
+    plt.close()
+    
+    file_path_npy = os.path.join(save_dir, f"scanline_col{col_index}_{safe_stage_name}.npy")
+    np.save(file_path_npy, scanline)
+    print(f"[{stage_name}] Scanline at column {col_index} saved to {save_dir}.")
+

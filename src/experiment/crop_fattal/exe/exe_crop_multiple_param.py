@@ -1,4 +1,4 @@
-# exe_multiple_param.py
+# exe_crop_multiple_param.py
 import cv2
 import numpy as np
 import os
@@ -6,19 +6,34 @@ import glob
 import sys
 import time
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
-# 사용자 정의 모듈 (환경에 맞게 존재해야 함)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+exp_dir = os.path.dirname(current_dir)
+src_dir = os.path.dirname(os.path.dirname(exp_dir))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+# 사용자 정의 모듈 (Baseline Fattal TMO)
 from fattal.fattal_tmo import pfstmo_fattal02
 
 # 파라미터 및 설정 불러오기
-from config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 import utils.utils as utils
 
+# ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
+# 직사각형 크롭 범위: (min_pixel, max_pixel)
+# None으로 설정하면 크롭하지 않고 전체 이미지를 사용합니다.
+# 실험을 위해 기본값을 임의의 사각형 좌표로 지정해 둡니다. (예: 500x500 크롭 영역)
+CROP_Y_RANGE = (201, 1833)  # 세로 범위 (Y축)
+CROP_X_RANGE = (311, 2982)  # 가로 범위 (X축)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def main():
     utils.start_timer()
-    utils.print_elapsed("시작")
+    utils.print_elapsed("크롭 Fattal 실험 실행 시작")
     
     # 출력 디렉토리가 존재하지 않으면 생성합니다.
     if not os.path.exists(OUTPUT_DIR):
@@ -38,7 +53,8 @@ def main():
 
     utils.print_elapsed("구간 1 (환경 설정 및 파일 탐색 완료)")
     print(f"총 {len(hdr_files)}개의 이미지와 {len(param_combinations)}개의 파라미터 조합이 감지되었습니다.")
-    print(f"총 {total_tasks}회의 톤 매핑 작업이 시작됩니다.\n")
+    print(f"크롭 범위 - Y축: {CROP_Y_RANGE}, X축: {CROP_X_RANGE}")
+    print(f"총 {total_tasks}회의 크롭된 Fattal 톤 매핑 작업이 시작됩니다.\n")
 
     # 2. 각 이미지에 대하여 반복 실행
     for img_path in hdr_files:
@@ -57,7 +73,18 @@ def main():
         else:
             img_single = img
 
-        utils.print_elapsed(f"구간 2 (이미지 로드 완료) - 대상: {file_name}")
+        # 이미지 크롭 적용
+        if CROP_Y_RANGE is not None or CROP_X_RANGE is not None:
+            h, w = img_single.shape
+            ymin, ymax = CROP_Y_RANGE if CROP_Y_RANGE is not None else (0, h)
+            xmin, xmax = CROP_X_RANGE if CROP_X_RANGE is not None else (0, w)
+            # 안전성 경계값 클리핑
+            ymin, ymax = max(0, ymin), min(h, ymax)
+            xmin, xmax = max(0, xmin), min(w, xmax)
+            img_single = img_single[ymin:ymax, xmin:xmax]
+            utils.print_elapsed(f"구간 2.5 (이미지 크롭 완료: Y[{ymin}:{ymax}], X[{xmin}:{xmax}])")
+        else:
+            utils.print_elapsed(f"구간 2 (이미지 로드 완료) - 대상: {file_name}")
 
         # 3. 각 파라미터 조합에 대하여 반복 실행
         for p in param_combinations:
@@ -69,7 +96,16 @@ def main():
                 hpf_sigma=p.get('hpf_sigma', 0.007)
             )
 
-            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}"
+            crop_suffix = ""
+            if CROP_Y_RANGE is not None or CROP_X_RANGE is not None:
+                h_orig, w_orig = img.shape[:2]
+                ymin, ymax = CROP_Y_RANGE if CROP_Y_RANGE is not None else (0, h_orig)
+                xmin, xmax = CROP_X_RANGE if CROP_X_RANGE is not None else (0, w_orig)
+                ymin, ymax = max(0, ymin), min(h_orig, ymax)
+                xmin, xmax = max(0, xmin), min(w_orig, xmax)
+                crop_suffix = f"_cropY{ymin}-{ymax}_X{xmin}-{xmax}"
+
+            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}{crop_suffix}"
             utils.print_elapsed(f"구간 3 (톤 매핑 연산 완료) - 파라미터: {param_suffix}")
 
             # 포맷 변환 및 클리핑 (8bit 단일 채널 이미지)

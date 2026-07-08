@@ -4,21 +4,32 @@ import numpy as np
 import os
 import glob
 import sys
-import time
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
-# 사용자 정의 모듈 (환경에 맞게 존재해야 함)
-from fattal.fattal_tmo import pfstmo_fattal02
+current_dir = os.path.dirname(os.path.abspath(__file__))
+exp_dir = os.path.dirname(current_dir)
+src_dir = os.path.dirname(os.path.dirname(exp_dir))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
-# 파라미터 및 설정 불러오기
-from config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+# HPF Pre-Fattal 모듈 가져오기
+from experiment.hpf_pre_fattal.fattal.fattal_tmo import pfstmo_fattal02
+
+# 파라미터 및 설정 불러오기 (config.py의 INPUT_DIR, OUTPUT_DIR 설정 그대로 사용)
+from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 import utils.utils as utils
 
+# ─── 실험 전용 사전 HPF (Pre-HPF) 설정 ─────────────────────────────────────
+# Original 이미지에 적용할 High-Pass Filter sigma 강도를 직접 지정하세요.
+PRE_HPF_SIGMA = 0.005
+# ─────────────────────────────────────────────────────────────────────────────
+
 def main():
     utils.start_timer()
-    utils.print_elapsed("시작")
+    utils.print_elapsed("Pre-HPF + Fattal 실험 실행 시작")
     
     # 출력 디렉토리가 존재하지 않으면 생성합니다.
     if not os.path.exists(OUTPUT_DIR):
@@ -38,7 +49,9 @@ def main():
 
     utils.print_elapsed("구간 1 (환경 설정 및 파일 탐색 완료)")
     print(f"총 {len(hdr_files)}개의 이미지와 {len(param_combinations)}개의 파라미터 조합이 감지되었습니다.")
-    print(f"총 {total_tasks}회의 톤 매핑 작업이 시작됩니다.\n")
+    print(f"사전 HPF Sigma: {PRE_HPF_SIGMA}")
+    print(f"출력 디렉토리 (config.py): {OUTPUT_DIR}")
+    print(f"총 {total_tasks}회의 Pre-HPF + Fattal 톤 매핑 작업이 시작됩니다.\n")
 
     # 2. 각 이미지에 대하여 반복 실행
     for img_path in hdr_files:
@@ -61,15 +74,18 @@ def main():
 
         # 3. 각 파라미터 조합에 대하여 반복 실행
         for p in param_combinations:
-            # 톤 매핑 연산 (감마 보정 없이 1채널 이미지를 pfstmo_fattal02에 전달)
+            pre_hpf_sigma = PRE_HPF_SIGMA
+
+            # Original 이미지에 HPF 사전 적용 후 Fattal 톤 매핑 연산
             L_out = pfstmo_fattal02(
                 img_single,
                 p['opt_alpha'], p['opt_beta'], p['opt_noise'],
                 p['newfattal'], p['fftsolver'], p['detail_level'],
-                hpf_sigma=p.get('hpf_sigma', 0.007)
+                hpf_sigma=p.get('hpf_sigma', 0.007),
+                pre_hpf_sigma=pre_hpf_sigma
             )
 
-            param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}"
+            param_suffix = f"preHPF{pre_hpf_sigma}_a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}"
             utils.print_elapsed(f"구간 3 (톤 매핑 연산 완료) - 파라미터: {param_suffix}")
 
             # 포맷 변환 및 클리핑 (8bit 단일 채널 이미지)
@@ -86,7 +102,7 @@ def main():
             print(f"완료: {save_path}")
             utils.print_elapsed("구간 5 (파일 저장 완료)")
     
-    utils.print_elapsed("프로그램 전체 종료")
+    utils.print_elapsed("Pre-HPF + Fattal 실험 프로그램 전체 종료")
 
 if __name__ == "__main__":
     main()

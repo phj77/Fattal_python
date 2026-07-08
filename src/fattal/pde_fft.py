@@ -7,6 +7,7 @@ from utils import utils
 # 연산 속도 최적화를 위해 PyFFTW 캐시를 활성화하고, 가용한 최대 스레드를 할당합니다.
 pyfftw.interfaces.cache.enable()
 pyfftw.config.NUM_THREADS = multiprocessing.cpu_count()
+used_thread = 16
 
 def transform_ev2normal(A: np.ndarray) -> np.ndarray:
     """고유 벡터 공간에서 원래 공간으로 변환합니다."""
@@ -23,7 +24,7 @@ def transform_ev2normal(A: np.ndarray) -> np.ndarray:
     A_scaled = A * S
     
     # FFTW_REDFT00에 대응하는 DCT-I (type=1) 실행
-    T = fftw_fft.dctn(A_scaled, type=1, norm=None, workers=10).astype(np.float32)
+    T = fftw_fft.dctn(A_scaled, type=1, norm=None, workers=used_thread).astype(np.float32)
     return T
 
 def transform_normal2ev(A: np.ndarray) -> np.ndarray:
@@ -31,7 +32,7 @@ def transform_normal2ev(A: np.ndarray) -> np.ndarray:
     height, width = A.shape
     
     # 2D DCT-I 실행
-    T = fftw_fft.dctn(A, type=1, norm=None, workers=10).astype(np.float32)
+    T = fftw_fft.dctn(A, type=1, norm=None, workers=used_thread).astype(np.float32)
     
     # 출력 매트릭스 스케일링
     S = np.ones((height, width), dtype=np.float32)
