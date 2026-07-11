@@ -9,43 +9,42 @@ data_path = project_root / "data"
 test_path = project_root / "test"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "data_one")
-OUTPUT_DIR = str(test_path / "he_pyramid_fattal")
-
-# ─── 피라미드 층 조합 설정 ───────────────────────────────────────────────
-TOTAL_PYRAMID_LEVELS = 9
-NUM_SELECTED_LEVELS = 4
-
-# 9개 층 중 4개 층을 선택하는 모든 조합 생성 (총 126가지)
-SELECTED_LEVELS_COMBINATIONS = list(itertools.combinations(range(TOTAL_PYRAMID_LEVELS), NUM_SELECTED_LEVELS))
-# ───────────────────────────────────────────────────────────────────
+INPUT_DIR = str(data_path / "data_one"/"7")
+#OUTPUT_DIR = str(test_path/"scaling_factor_visualization"/"detail_level_0")
+# OUTPUT_DIR = str(test_path/"scanline"/"vertical")
+OUTPUT_DIR = str(test_path/"scaling_factor_modified_0711"/"7"/"a0.9b0.8top_pyramid8")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
 # np.round(배열, 소수점_자릿수) : 파일명 오차 방지
 
 alpha_range = np.round(np.arange(0.1, 1, 0.05), 2).tolist()
-
 beta_range = np.round(np.arange(0.1, 1.00, 0.03), 2).tolist()
 
 alpha_range_v2 = np.round(np.arange(0.1, 1, 0.1), 2).tolist()
 
 beta_range_v2 = np.round(np.arange(0.1, 1.00, 0.1), 2).tolist()
+
+att_range = np.round(np.arange(1.1, 2.50, 0.1), 2).tolist()
 # ───────────────────────────────────────────────────────────────────
+
+# ─── TOP_SIZE 설정 ───────────────────────────────────────────────────
+# fftsolver가 True일 때 사용할 TOP_SIZE (기본값: 8)
+PYRAMID_TOP_SIZE = 2**3
 
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
     'opt_alpha': [0.9],
-    'opt_beta': [0.88],
+    'opt_beta': [0.8],
     'opt_noise': [0.001],
+    'opt_y_0': att_range, # 2-beta에서 x<a는 직선, y_0>1
     'newfattal': [True],
     'fftsolver': [True],
     'detail_level': [0],
     'hpf_sigma': [0.007],
     'pre_gamma': [1.0],
     'post_gamma': [1.0],
-    'he_weight': [0.0],
-    'selected_levels': SELECTED_LEVELS_COMBINATIONS
+    'pyramid_top_size': [PYRAMID_TOP_SIZE]
 }
 
 def get_parameter_combinations():

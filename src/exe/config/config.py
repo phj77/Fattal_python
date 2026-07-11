@@ -12,7 +12,7 @@ test_path = project_root / "test"
 INPUT_DIR = str(data_path / "data_one"/"3")
 #OUTPUT_DIR = str(test_path/"scaling_factor_visualization"/"detail_level_0")
 # OUTPUT_DIR = str(test_path/"scanline"/"vertical")
-OUTPUT_DIR = str(test_path/"tmp2")
+OUTPUT_DIR = str(test_path/"image_crop"/"3")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -34,7 +34,7 @@ PYRAMID_TOP_SIZE = 2**3
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
     'opt_alpha': [0.9],
-    'opt_beta': [0.85,0.86,0.87],
+    'opt_beta': [0.81],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],

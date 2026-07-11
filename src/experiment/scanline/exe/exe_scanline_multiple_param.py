@@ -26,7 +26,8 @@ import utils.utils as utils
 # Dataset configs mapping scanline row and highlight ranges for default datasets (1~7)
 dataset_configs = {
     1: {"row": 1100, "highlight": [[2310, 2382], [1740, 1825]]},
-    2: {"row": 1661, "highlight": [[300, 530], [1868, 1965]]},
+    # 2: {"row": 1661, "highlight": [[300, 530], [1868, 1965]]},
+    2: {"row": 317, "highlight": [[1880, 1954]]},
     3: {"row": 955,  "highlight": [[533, 622], [1380, 1490], [2260, 2355]]},
     4: {"row": 974,  "highlight": [[457, 475], [590, 607]]},
     5: {"row": 1170, "highlight": [[2073, 2188]]},

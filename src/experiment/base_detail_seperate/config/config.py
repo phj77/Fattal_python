@@ -11,15 +11,15 @@ test_path = project_root / "test"
 
 # 입출력 디렉토리 설정
 INPUT_DIR = str(data_path / "data_one"/"2")
-OUTPUT_DIR = str(test_path / "base_detail_seperate"/"2")
+OUTPUT_DIR = str(test_path / "base_detail_seperate"/"2"/"boundary")
 
 # ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
 # 직사각형 크롭 범위: (min_pixel, max_pixel)
 # None으로 설정하면 크롭하지 않고 전체 이미지를 사용합니다.
 # CROP_Y_RANGE = (201, 1833)  # 세로 범위 (Y축), 예: (201, 1833); dataset3
 # CROP_X_RANGE = (311, 2982)  # 가로 범위 (X축), 예: (311, 2982)
-CROP_Y_RANGE = (240, 1820)  # 세로 범위 (Y축) # dataset2
-CROP_X_RANGE = (146, 3072)  # 가로 범위 (X축) # dataset2
+CROP_Y_RANGE = (256, 334)  # 세로 범위 (Y축) # dataset2
+CROP_X_RANGE = (170, 3072)  # 가로 범위 (X축) # dataset2
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ─── Guided Filter 파라미터 ─────────────────────────────────────────────────
@@ -52,7 +52,7 @@ PARAM_GRID = {
     'hpf_sigma': [0.007],
     # Guided Filter 파라미터
     'gf_radius': [16],
-    'gf_eps': [0.01, 0.05, 0.1],
+    'gf_eps': [0.001, 0.005, 0.01, 0.05],
     # Detail 합성 파라미터
     'detail_factor': [2,10],
 }

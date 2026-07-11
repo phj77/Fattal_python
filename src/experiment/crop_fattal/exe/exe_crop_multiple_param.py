@@ -23,12 +23,16 @@ from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 import utils.utils as utils
 
-# ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
-# 직사각형 크롭 범위: (min_pixel, max_pixel)
-# None으로 설정하면 크롭하지 않고 전체 이미지를 사용합니다.
-# 실험을 위해 기본값을 임의의 사각형 좌표로 지정해 둡니다. (예: 500x500 크롭 영역)
-CROP_Y_RANGE = (201, 1833)  # 세로 범위 (Y축)
-CROP_X_RANGE = (311, 2982)  # 가로 범위 (X축)
+# ─── 각 데이터셋별 이미지 크롭 범위 설정 ───────────────────────────────────
+CROP_RANGES = {
+    1: {'Y': (459, 1577), 'X': (121, 3072)},
+    2: {'Y': (248, 1821), 'X': (124, 3072)},
+    3: {'Y': (201, 1833), 'X': (311, 2982)},
+    4: {'Y': (278, 1728), 'X': (273, 3072)},
+    5: {'Y': (700, 2048), 'X': (0, 2945)},
+    6: {'Y': (324, 1746), 'X': (278, 3072)},
+    7: {'Y': (307, 1746), 'X': (100, 3012)}
+}
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
@@ -51,9 +55,29 @@ def main():
     param_combinations = get_parameter_combinations()
     total_tasks = len(hdr_files) * len(param_combinations)
 
+    # 데이터셋 번호 판별 및 크롭 범위 설정
+    dataset_num = None
+    path_parts = os.path.normpath(INPUT_DIR).split(os.sep)
+    for part in reversed(path_parts):
+        try:
+            val = int(part)
+            if val in CROP_RANGES:
+                dataset_num = val
+                break
+        except ValueError:
+            continue
+
+    if dataset_num is not None:
+        crop_y_range = CROP_RANGES[dataset_num]['Y']
+        crop_x_range = CROP_RANGES[dataset_num]['X']
+        print(f"데이터셋 [{dataset_num}] 크롭 범위 적용 - Y축: {crop_y_range}, X축: {crop_x_range}")
+    else:
+        crop_y_range = None
+        crop_x_range = None
+        print("경고: 데이터셋 번호를 판별할 수 없어 크롭을 적용하지 않습니다.")
+
     utils.print_elapsed("구간 1 (환경 설정 및 파일 탐색 완료)")
     print(f"총 {len(hdr_files)}개의 이미지와 {len(param_combinations)}개의 파라미터 조합이 감지되었습니다.")
-    print(f"크롭 범위 - Y축: {CROP_Y_RANGE}, X축: {CROP_X_RANGE}")
     print(f"총 {total_tasks}회의 크롭된 Fattal 톤 매핑 작업이 시작됩니다.\n")
 
     # 2. 각 이미지에 대하여 반복 실행
@@ -74,10 +98,10 @@ def main():
             img_single = img
 
         # 이미지 크롭 적용
-        if CROP_Y_RANGE is not None or CROP_X_RANGE is not None:
+        if crop_y_range is not None or crop_x_range is not None:
             h, w = img_single.shape
-            ymin, ymax = CROP_Y_RANGE if CROP_Y_RANGE is not None else (0, h)
-            xmin, xmax = CROP_X_RANGE if CROP_X_RANGE is not None else (0, w)
+            ymin, ymax = crop_y_range if crop_y_range is not None else (0, h)
+            xmin, xmax = crop_x_range if crop_x_range is not None else (0, w)
             # 안전성 경계값 클리핑
             ymin, ymax = max(0, ymin), min(h, ymax)
             xmin, xmax = max(0, xmin), min(w, xmax)
@@ -97,10 +121,10 @@ def main():
             )
 
             crop_suffix = ""
-            if CROP_Y_RANGE is not None or CROP_X_RANGE is not None:
+            if crop_y_range is not None or crop_x_range is not None:
                 h_orig, w_orig = img.shape[:2]
-                ymin, ymax = CROP_Y_RANGE if CROP_Y_RANGE is not None else (0, h_orig)
-                xmin, xmax = CROP_X_RANGE if CROP_X_RANGE is not None else (0, w_orig)
+                ymin, ymax = crop_y_range if crop_y_range is not None else (0, h_orig)
+                xmin, xmax = crop_x_range if crop_x_range is not None else (0, w_orig)
                 ymin, ymax = max(0, ymin), min(h_orig, ymax)
                 xmin, xmax = max(0, xmin), min(w_orig, xmax)
                 crop_suffix = f"_cropY{ymin}-{ymax}_X{xmin}-{xmax}"
