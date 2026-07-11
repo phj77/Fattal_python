@@ -19,12 +19,11 @@ if str(src_dir) not in sys.path:
 
 # HPF Pre-Fattal 모듈 가져오기
 from experiment.hpf_pre_fattal.fattal.fattal_tmo import pfstmo_fattal02
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.hpf_pre_fattal.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 import utils.utils as utils
 
 # ─── 실험 전용 사전 HPF (Pre-HPF) 설정 ─────────────────────────────────────
-# Original 이미지에 적용할 High-Pass Filter sigma 강도를 지정합니다.
-PRE_HPF_SIGMA = 0.009
+# (이제 config.py의 PARAM_GRID에서 pre_hpf_sigma 값을 여러개 설정하여 자동 실험합니다)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Dataset configs mapping scanline row and highlight ranges for default datasets (1~7)
@@ -101,7 +100,8 @@ def main():
 
     print(f"입력 디렉토리: {INPUT_DIR}")
     print(f"출력 디렉토리: {base_output_dir}")
-    print(f"사전 HPF Sigma: {PRE_HPF_SIGMA}")
+    distinct_pre_hpf_sigmas = sorted(list(set(p.get('pre_hpf_sigma', 0.009) for p in param_combinations)))
+    print(f"사전 HPF Sigma 리스트: {distinct_pre_hpf_sigmas}")
     print(f"감지된 데이터셋 디렉토리 수: {len(dataset_dirs)}, 파라미터 조합 수: {len(param_combinations)}\n")
 
     for d_idx, ds_dir in enumerate(dataset_dirs, 1):
@@ -145,7 +145,7 @@ def main():
                 fftsolver = p.get('fftsolver', True)
                 detail_level = p.get('detail_level', 0)
                 hpf_sigma = p.get('hpf_sigma', 0.007)
-                pre_hpf_sigma = PRE_HPF_SIGMA
+                pre_hpf_sigma = p.get('pre_hpf_sigma', 0.009)
 
                 param_folder_name = f"preHPF{pre_hpf_sigma}_a{opt_alpha}_b{opt_beta}_dl{detail_level}"
                 if len(hdr_files) > 1:

@@ -12,7 +12,7 @@ test_path = project_root / "test"
 INPUT_DIR = str(data_path / "data_one"/"3")
 #OUTPUT_DIR = str(test_path/"scaling_factor_visualization"/"detail_level_0")
 # OUTPUT_DIR = str(test_path/"scanline"/"vertical")
-OUTPUT_DIR = str(test_path/"tmp"/"scanline")
+OUTPUT_DIR = str(test_path/"tmp2")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -27,17 +27,22 @@ alpha_range_v2 = np.round(np.arange(0.1, 1, 0.1), 2).tolist()
 beta_range_v2 = np.round(np.arange(0.1, 1.00, 0.1), 2).tolist()
 # ───────────────────────────────────────────────────────────────────
 
+# ─── TOP_SIZE 설정 ───────────────────────────────────────────────────
+# fftsolver가 True일 때 사용할 TOP_SIZE (기본값: 8)
+PYRAMID_TOP_SIZE = 2**3
+
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
     'opt_alpha': [0.9],
-    'opt_beta': [0.9],
+    'opt_beta': [0.85,0.86,0.87],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],
     'detail_level': [0],
     'hpf_sigma': [0.007],
     'pre_gamma': [1.0],
-    'post_gamma': [1.0]
+    'post_gamma': [1.0],
+    'pyramid_top_size': [PYRAMID_TOP_SIZE]
 }
 
 def get_parameter_combinations():

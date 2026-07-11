@@ -177,7 +177,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
     
-    TOP_SIZE = 2**3 if fftsolver else 32
+    TOP_SIZE = 2**5 if fftsolver else 32
 
     minLum = np.min(Y)
     maxLum = np.max(Y)

@@ -1,5 +1,5 @@
 # exe_scaling_factor_scanline.py
-# Save scanline plots and data for level-wise scaling factors and final combined attenuation map for scaling_factor_modified.
+# Save scanline plots and data for level-wise scaling factors and final combined attenuation map for scaling_factor_modified_monotonic.
 
 import os
 import sys
@@ -22,28 +22,22 @@ src_dir = current_file.parents[3]  # .../Fattal_python/src
 if str(src_dir) not in sys.path:
     sys.path.append(str(src_dir))
 
-# Import scaling_factor_modified modules and configs
-from experiment.scaling_factor_modified.fattal.fattal_tmo import (
+# Import scaling_factor_modified_monotonic modules and configs
+from experiment.scaling_factor_modified_monotonic.fattal.fattal_tmo import (
     apply_high_pass_filter,
     createGaussianPyramids,
     calculate_level_scaling_factor,
     calculate_attenuation
 )
-from experiment.scaling_factor_modified.config.config import (
+from experiment.scaling_factor_modified_monotonic.config.config import (
     INPUT_DIR, OUTPUT_DIR, get_parameter_combinations,
     CROP_Y_RANGE, CROP_X_RANGE
 )
 import utils.utils as utils
 
-# Y축 (Colorbar 범주) 고정 여부 설정:
-# True  : 전체 레벨 및 최종 맵의 글로벌 min/max로 2D 시각화의 Colorbar 범위 고정
-# False : 각 scaling factor map의 min/max에 따라 Y축(Colorbar) 동적 설정
 FIX_Y_AXIS = False
-
-# 2D 맵 이미지 위에 빨간색 스캔라인 점선 및 범례 표시 여부 설정
 DRAW_SCANLINE = False
 
-# Dataset configs mapping scanline row and highlight ranges for default datasets (1~7)
 dataset_configs = {
     1: {"row": 1100, "highlight": [[2310, 2382], [1740, 1825]]},
     2: {"row": 1661, "highlight": [[300, 530], [1868, 1965]]},
@@ -56,9 +50,6 @@ dataset_configs = {
 
 
 def validate_and_get_dataset_dirs(input_dir):
-    """
-    INPUT_DIR 및 하위 디렉토리를 검증하고, .hdr 파일이 존재하는 폴더 경로 리스트를 반환합니다.
-    """
     input_dir_abs = os.path.abspath(input_dir)
     norm_input_dir = os.path.normpath(input_dir_abs)
 
@@ -66,12 +57,10 @@ def validate_and_get_dataset_dirs(input_dir):
         print(f"[오류] 지정한 INPUT_DIR('{input_dir}') 경로가 존재하지 않거나 디렉토리가 아닙니다.")
         sys.exit(1)
 
-    # Case 1: INPUT_DIR 내에 .hdr 파일이 직접 존재하는 경우
     direct_hdr = glob.glob(os.path.join(norm_input_dir, '*.hdr'))
     if direct_hdr:
         return [norm_input_dir]
 
-    # Case 2: 하위 디렉토리 탐색
     subdirs = [os.path.join(norm_input_dir, d) for d in os.listdir(norm_input_dir)
                if os.path.isdir(os.path.join(norm_input_dir, d))]
 
@@ -92,7 +81,6 @@ def validate_and_get_dataset_dirs(input_dir):
 
 
 def get_scanline_config(input_dir_path, img_shape):
-    """Determine scanline row and highlight ranges based on input directory name."""
     dir_name = os.path.basename(os.path.normpath(input_dir_path))
     if dir_name.isdigit() and int(dir_name) in dataset_configs:
         cfg = dataset_configs[int(dir_name)]
@@ -102,14 +90,12 @@ def get_scanline_config(input_dir_path, img_shape):
 
 
 def visualize_attenuation_map_with_scanline(att_map, level, scanline_row, save_path, title=None, vmin=None, vmax=None):
-    """Visualize a single scaling factor / attenuation map as a colormap with the scanline row highlighted."""
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
     im = ax.imshow(att_map, cmap='viridis', aspect='auto', vmin=vmin, vmax=vmax)
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label('Scaling Factor (Attenuation) Value', fontsize=12)
 
-    # Draw horizontal red dashed line for the scanline row if DRAW_SCANLINE is True
     if DRAW_SCANLINE:
         ax.axhline(y=scanline_row, color='red', linestyle='--', linewidth=1.5, label=f'Scanline Row {scanline_row}')
         ax.legend(loc='upper right')
@@ -140,7 +126,6 @@ def visualize_attenuation_map_with_scanline(att_map, level, scanline_row, save_p
 
 
 def process_single_image(img_path, ds_dir, base_output_dir, param):
-    """Process a single HDR image: compute level-wise scaling factors, combined map, and save scanlines."""
     file_name = os.path.splitext(os.path.basename(img_path))[0]
     dataset_name = os.path.basename(os.path.normpath(ds_dir))
 
@@ -154,17 +139,15 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
     
     pre_hpf_sigma = param.get('pre_hpf_sigma', 0.010)
     noise_val = opt_noise if opt_noise > 0 else opt_alpha * 0.01
-    v0 = param.get('v0', 0.01)
-    xp_ratio = param.get('xp_ratio', 0.1)
-    vp = param.get('vp', 6.0)
-    pw = param.get('w', 1)
+    xp_ratio = param.get('xp_ratio', 0.05)
+    y0 = param.get('y0', 6.0)
     
     # Save directory structure
     crop_suffix = ""
     if CROP_Y_RANGE is not None or CROP_X_RANGE is not None:
         crop_suffix = f"_cropY{CROP_Y_RANGE[0]}-{CROP_Y_RANGE[1]}_X{CROP_X_RANGE[0]}-{CROP_X_RANGE[1]}"
     
-    param_folder_name = f"preHPF{pre_hpf_sigma}_a{opt_alpha}_b{opt_beta}_n{opt_noise}_dl{detail_level}_v0{v0}_xp{xp_ratio}_vp{vp}_w{pw}{crop_suffix}"
+    param_folder_name = f"preHPF{pre_hpf_sigma}_a{opt_alpha}_b{opt_beta}_n{opt_noise}_dl{detail_level}_xpRatio{xp_ratio}_y0{y0}{crop_suffix}"
     
     if dataset_name.isdigit():
         dataset_output_dir = os.path.join(base_output_dir, dataset_name)
@@ -201,10 +184,8 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
         ymin, ymax = max(0, ymin), min(h_orig, ymax)
         xmin, xmax = max(0, xmin), min(w_orig, xmax)
         
-        # Apply crop
         img_single = img_single[ymin:ymax, xmin:xmax]
         
-        # Adjust scanline row and highlights relative to crop
         scanline_row = scanline_row - ymin
         if highlight_ranges is not None:
             adjusted_highlights = []
@@ -235,7 +216,7 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
 
     # 3. Create Gaussian pyramids
     h, w = H.shape
-    msize = 32 if fft_solver else 32 ####@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    msize = 32 if fft_solver else 32
     mins = min(w, h)
     nlevels = 0
     temp_mins = mins
@@ -254,7 +235,7 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
         if k >= detail_level or k == nlevels - 1 or not new_fattal:
             att = calculate_level_scaling_factor(
                 pyramids[k], k, opt_alpha, opt_beta, noise_val,
-                v0=v0, xp_ratio=xp_ratio, vp=vp, pw=pw
+                xp_ratio=xp_ratio, y0=y0
             )
             scaling_factors[k] = att
 
@@ -276,12 +257,10 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
             att = scaling_factors[k]
             ph, pw = pyramids[k].shape
 
-            # Coordinate scaling for level k
             scale_factor = 2.0 ** k
             row_k = int(round(scanline_row / scale_factor))
             row_k = np.clip(row_k, 0, ph - 1)
 
-            # Highlight range scaling
             highlight_ranges_k = []
             if highlight_ranges is not None:
                 for rng in highlight_ranges:
@@ -292,7 +271,6 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
                         end_k = np.clip(end_k, 0, pw - 1)
                         highlight_ranges_k.append([start_k, end_k])
 
-            # 7-1. Save 2D map with scanline line
             map_name = f"scaling_factor_level_{k:02d}_{pw}x{ph}_with_line.png"
             map_path = save_dir / map_name
             title = (
@@ -301,7 +279,6 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
             )
             visualize_attenuation_map_with_scanline(att, k, row_k, str(map_path), title=title, vmin=vmin, vmax=vmax)
 
-            # 7-2. Save 1D Scanline profile (PNG & NPY) using utils.save_scanline
             stage_name = f"scaling_factor_level_{k:02d}"
             utils.save_scanline(
                 att,
@@ -324,7 +301,6 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
     )
     visualize_attenuation_map_with_scanline(final_att, -1, scanline_row, str(final_map_path), title=final_title, vmin=vmin, vmax=vmax)
 
-    # Save final combined map 1D scanline profile
     utils.save_scanline(
         final_att,
         row_index=scanline_row,

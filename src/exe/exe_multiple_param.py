@@ -66,7 +66,8 @@ def main():
                 img_single,
                 p['opt_alpha'], p['opt_beta'], p['opt_noise'],
                 p['newfattal'], p['fftsolver'], p['detail_level'],
-                hpf_sigma=p.get('hpf_sigma', 0.007)
+                hpf_sigma=p.get('hpf_sigma', 0.007),
+                pyramid_top_size=p['pyramid_top_size']
             )
 
             param_suffix = f"a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}"

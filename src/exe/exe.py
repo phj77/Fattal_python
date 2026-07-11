@@ -44,6 +44,7 @@ newfattal = True  ##### fft_solver가 True이면 무조건 True
 fftsolver = False
 detail_level = 0 # 0이 보통 더 나은듯
 hpf_sigma = 0.007
+pyramid_top_size = 8
 
 pre_gamma = 1
 post_gamma = 1
@@ -64,12 +65,15 @@ G_pre = pre_frame.y_channel.data
 B_pre = pre_frame.z_channel.data
 
 # 5. 톤 매핑
-R_out, G_out, B_out = pfstmo_fattal02(
-    R_pre, G_pre, B_pre,
-    opt_alpha, opt_beta, opt_saturation, opt_noise,
+L_out = pfstmo_fattal02(
+    R_pre,
+    opt_alpha, opt_beta, opt_noise,
     newfattal, fftsolver, detail_level,
-    hpf_sigma=hpf_sigma
+    hpf_sigma=hpf_sigma,
+    pyramid_top_size=pyramid_top_size
 )
+R_out = G_out = B_out = L_out
+
 
 # 6. 후처리 감마 보정
 post_frame = Frame(R_out, G_out, B_out)

@@ -5,7 +5,10 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from utils import utils
 from fattal import pde_multigrid
@@ -135,22 +138,41 @@ def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
     return attenuation[0]
 
 
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=2**3):
-    utils.print_elapsed("     [tmo] 시작")
-    h, w = Y.shape
-    #detail_level = np.clip(detail_level, 0, 3) #detail level 이상의 피라미드 층만 감쇠 함수를 연산함.
+def tmo_fattal02_guided(Y, alfa, beta, noise, newfattal, fftsolver, detail_level,
+                        hpf_sigma=0.007, pyramid_top_size=8,
+                        guided_radius=16, guided_eps=0.01, add_base_back=True):
+    """
+    Guided Filter를 사용하여 Log domain에서 base/detail을 분리한 후,
+    detail layer에 Fattal 알고리즘을 적용합니다.
     
-    #TOP_SIZE = 2**8 if fftsolver else 32
+    Args:
+        Y: 입력 luminance 이미지 (linear domain)
+        guided_radius: Guided Filter 윈도우 반경
+        guided_eps: Guided Filter 정규화 파라미터 (Log domain 기준)
+        add_base_back: True이면 Fattal 처리 후 base layer를 재합성
+    """
+    utils.print_elapsed("     [tmo_guided] 시작")
+    h, w = Y.shape
+
     TOP_SIZE = pyramid_top_size if fftsolver else 32
 
-    minLum = np.min(Y)
     maxLum = np.max(Y)
 
-    # 로그 공간 변환
+    # ─── Step 1: Log domain 변환 ───────────────────────────────────────
     H = np.log(100.0 * Y / maxLum + 1e-4)
-    utils.print_elapsed("     [tmo] 로그 공간 변환 완료")
+    utils.print_elapsed("     [tmo_guided] 로그 공간 변환 완료")
 
-    # 가우시안 피라미드 구성 
+    # ─── Step 2: Guided Filter로 base/detail 분리 ─────────────────────
+    H_f32 = H.astype(np.float32)
+    base = cv2.ximgproc.guidedFilter(
+        guide=H_f32, src=H_f32,
+        radius=guided_radius, eps=guided_eps
+    )
+    detail = H_f32 - base
+    utils.print_elapsed(f"     [tmo_guided] Guided Filter 분리 완료 (r={guided_radius}, eps={guided_eps})")
+
+    # ─── Step 3: Detail layer에 Fattal 알고리즘 적용 ──────────────────
+    # 가우시안 피라미드 구성 (detail 기반)
     mins = min(w, h)
     n_pyramid_levels = 0
     temp_mins = mins
@@ -159,10 +181,10 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
         temp_mins //= 2
     if n_pyramid_levels == 0: n_pyramid_levels = 1
 
-    pyramids = createGaussianPyramids(H, n_pyramid_levels)
-    utils.print_elapsed("     [tmo] 가우시안 피라미드 구성 완료")
+    pyramids = createGaussianPyramids(detail, n_pyramid_levels)
+    utils.print_elapsed("     [tmo_guided] Detail 가우시안 피라미드 구성 완료")
 
-    # value 행렬 병렬 계산
+    # scaling factor 병렬 계산
     scaling_factor = [None] * n_pyramid_levels
     with ThreadPoolExecutor(max_workers=n_pyramid_levels) as executor:
         futures = []
@@ -177,24 +199,24 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
 
     # FI 행렬 계산
     attenuation_map = calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
-    utils.print_elapsed("     [tmo] FI 행렬 및 그래디언트 계산 완료")
+    utils.print_elapsed("     [tmo_guided] FI 행렬 및 그래디언트 계산 완료")
 
-    # 기울기 감쇠
+    # ─── Step 4: 기울기 감쇠 (detail 기반) ────────────────────────────
     if fftsolver:
         # Gx 계산 (가로 방향)
-        Gx = np.empty_like(H)
-        Gx[:, :-1] = (H[:, 1:] - H[:, :-1]) * 0.5 * (attenuation_map[:, 1:] + attenuation_map[:, :-1])
-        Gx[:, -1] = (H[:, -2] - H[:, -1]) * 0.5 * (attenuation_map[:, -2] + attenuation_map[:, -1])
+        Gx = np.empty_like(detail)
+        Gx[:, :-1] = (detail[:, 1:] - detail[:, :-1]) * 0.5 * (attenuation_map[:, 1:] + attenuation_map[:, :-1])
+        Gx[:, -1] = (detail[:, -2] - detail[:, -1]) * 0.5 * (attenuation_map[:, -2] + attenuation_map[:, -1])
         
         # Gy 계산 (세로 방향)
-        Gy = np.empty_like(H)
-        Gy[:-1, :] = (H[1:, :] - H[:-1, :]) * 0.5 * (attenuation_map[1:, :] + attenuation_map[:-1, :])
-        Gy[-1, :] = (H[-2, :] - H[-1, :]) * 0.5 * (attenuation_map[-2, :] + attenuation_map[-1, :])
+        Gy = np.empty_like(detail)
+        Gy[:-1, :] = (detail[1:, :] - detail[:-1, :]) * 0.5 * (attenuation_map[1:, :] + attenuation_map[:-1, :])
+        Gy[-1, :] = (detail[-2, :] - detail[-1, :]) * 0.5 * (attenuation_map[-2, :] + attenuation_map[-1, :])
     else:
         e = np.minimum(np.arange(w) + 1, w - 1)
         s = np.minimum(np.arange(h) + 1, h - 1)
-        Gx = (H[:, e] - H) * attenuation_map
-        Gy = (H[s, :] - H) * attenuation_map
+        Gx = (detail[:, e] - detail) * attenuation_map
+        Gy = (detail[s, :] - detail) * attenuation_map
 
     # 다이버전스(발산) 계산
     DivG = Gx + Gy
@@ -204,20 +226,27 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
     if fftsolver:
         DivG[:, 0] += Gx[:, 0]
         DivG[0, :] += Gy[0, :]
-    utils.print_elapsed("     [tmo] 다이버전스(발산) 계산 완료")
+    utils.print_elapsed("     [tmo_guided] 다이버전스(발산) 계산 완료")
 
-    # PDE 풀이
-    utils.print_elapsed("     [tmo] PDE 풀이 시작")
+    # ─── Step 5: PDE 풀이 ─────────────────────────────────────────────
+    utils.print_elapsed("     [tmo_guided] PDE 풀이 시작")
     if fftsolver:
         U = pde_fft.solve_pde_fft(DivG, hpf_sigma=hpf_sigma)
     else:
         U = np.zeros_like(DivG)
         U = pde_multigrid.solve_pde_multigrid(DivG, U)
-    utils.print_elapsed("     [tmo] PDE 풀이 완료")
+    utils.print_elapsed("     [tmo_guided] PDE 풀이 완료")
 
-    # 지수 공간으로 복원
+    # ─── Step 6: 복원 ─────────────────────────────────────────────────
     gamma = 1.0
-    L = np.exp(gamma * U)
+    if add_base_back:
+        # base layer를 다시 합성한 뒤 exp 복원
+        L = np.exp(gamma * (U + base))
+        utils.print_elapsed("     [tmo_guided] base layer 재합성 후 복원 완료")
+    else:
+        # detail만으로 결과 생성
+        L = np.exp(gamma * U)
+        utils.print_elapsed("     [tmo_guided] detail만으로 복원 완료")
 
     # 백분위수 기반 정규화 (0.1% ~ 99.5%) - ThreadPoolExecutor 병렬 연산
     cut_min = 0.01 * 0.1
@@ -232,19 +261,29 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
     L = (L - min_val) / (max_val - min_val)
     L = np.clip(L, 0, 1)
 
-    utils.print_elapsed("     [tmo] 정규화 완료")
+    utils.print_elapsed("     [tmo_guided] 정규화 완료")
     
     return L
 
-def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=2**3):
-    utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
+def pfstmo_fattal02_guided(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level,
+                           hpf_sigma=0.007, pyramid_top_size=8,
+                           guided_radius=16, guided_eps=0.01, add_base_back=True):
+    """
+    Guided Filter + Fattal 진입점 함수.
+    Log domain에서 Guided Filter로 base/detail 분리 후 detail에 Fattal 적용.
+    """
+    utils.print_elapsed("   [pfstmo_guided] 시작 (RGB to Y 변환)")
     if fftsolver:
         newfattal = True
 
     if opt_noise <= 0.0:
         opt_noise = opt_alpha * 0.01
 
-    L = tmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=hpf_sigma, pyramid_top_size=pyramid_top_size)
-    utils.print_elapsed("   [pfstmo] tmo_fattal02 연산 완료")
+    L = tmo_fattal02_guided(
+        img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level,
+        hpf_sigma=hpf_sigma, pyramid_top_size=pyramid_top_size,
+        guided_radius=guided_radius, guided_eps=guided_eps, add_base_back=add_base_back
+    )
+    utils.print_elapsed("   [pfstmo_guided] tmo_fattal02_guided 연산 완료")
 
     return L

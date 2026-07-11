@@ -25,11 +25,11 @@ from experiment.hpf_pre_fattal.fattal.fattal_tmo import (
     apply_high_pass_filter,
     createGaussianPyramids
 )
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID
+from experiment.hpf_pre_fattal.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID
 import utils.utils as utils
 
 # ─── 실험 전용 설정 ─────────────────────────────────────────────────────────
-PRE_HPF_SIGMA = 0.010
+PRE_HPF_SIGMA = PARAM_GRID.get('pre_hpf_sigma', [0.010])[0]
 # ─────────────────────────────────────────────────────────────────────────────
 
 # --- Parameters (from config.py) ---

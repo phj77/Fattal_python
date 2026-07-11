@@ -29,12 +29,12 @@ from experiment.hpf_pre_fattal.fattal.fattal_tmo import (
     calculate_level_scaling_factor,
     calculate_attenuation
 )
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.hpf_pre_fattal.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID, get_parameter_combinations
 import utils.utils as utils
 
 # ─── 실험 전용 사전 HPF (Pre-HPF) 및 시각화 설정 ───────────────────────────
 # Original 이미지에 적용할 High-Pass Filter sigma 강도
-PRE_HPF_SIGMA = 0.010
+PRE_HPF_SIGMA = PARAM_GRID.get('pre_hpf_sigma', [0.010])[0]
 
 # Y축 (Colorbar 범주) 고정 여부 설정:
 # True  : 전체 레벨 및 최종 맵의 글로벌 min/max로 2D 시각화의 Colorbar 범위 고정

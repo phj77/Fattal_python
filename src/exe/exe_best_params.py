@@ -43,6 +43,7 @@ def main():
     fftsolver = True
     detail_level = 0
     hpf_sigma = 0.007
+    pyramid_top_size = 8
 
     print(f"출력 디렉토리: {output_dir}\n")
 
@@ -81,7 +82,8 @@ def main():
                 img,
                 p['alpha'], p['beta'], opt_noise,
                 newfattal, fftsolver, detail_level,
-                hpf_sigma=hpf_sigma
+                hpf_sigma=hpf_sigma,
+                pyramid_top_size=pyramid_top_size
             )
 
             out_img = np.clip(L_out, 0.0, 1.0)

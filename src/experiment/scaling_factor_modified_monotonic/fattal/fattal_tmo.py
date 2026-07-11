@@ -56,7 +56,6 @@ def apply_high_pass_filter(img: np.ndarray, pre_hpf_sigma: float = 0.007) -> np.
     return img_hpf
 
 
-#same
 def gaussianBlur(I):
     h, w = I.shape
     if w < 3 or h < 3:
@@ -76,40 +75,35 @@ def gaussianBlur(I):
 
     return L
 
-#same; Gaussian pyramid 만들때 avg pooling, blur를 둘 다 사용할 필요 있나?
+
 def downSample(A):
-    # Original in LuminanceHDR
     h, w = A.shape
     nh, nw = h // 2, w // 2
     B = (A[0:2*nh:2, 0:2*nw:2] + A[1:2*nh:2, 0:2*nw:2] + 
          A[0:2*nh:2, 1:2*nw:2] + A[1:2*nh:2, 1:2*nw:2]) * 0.25
-
-    # downsample by sampling
-    # B = A[::2, ::2]
     return B
 
-#new!
+
 def createGaussianPyramids(H, n_pyramid_levels):
-    """C++의 createGaussianPyramids를 정확히 재현"""
     pyramids = [H]
-    L = gaussianBlur(H)  # 먼저 블러
+    L = gaussianBlur(H)
 
     for k in range(1, n_pyramid_levels):
-        down = downSample(L)          # 블러된 이미지를 다운샘플
+        down = downSample(L)
         pyramids.append(down)
         if k < n_pyramid_levels - 1:
-            L = gaussianBlur(down)    # 다음 레벨을 위해 블러
-        # 마지막 레벨은 추가 blur 불필요 (다음 단계 없음)
+            L = gaussianBlur(down)
 
     return pyramids
 
-#same
+
 def upSample(A, target_shape):
     th, tw = target_shape
     ah, aw = A.shape
     y_idx = np.clip(np.arange(th) // 2, 0, ah - 1)
     x_idx = np.clip(np.arange(tw) // 2, 0, aw - 1)
     return A[np.ix_(y_idx, x_idx)]
+
 
 def calculate_gradient_mag(H, k):
     h, w = H.shape
@@ -130,28 +124,96 @@ def calculate_gradient_mag(H, k):
     G = np.sqrt(gx**2 + gy**2)
     return G
 
-def calculate_scaling_factor(gradient,alfa,beta,noise):
+
+def calculate_scaling_factor(gradient, alfa, beta, noise):
     avgGrad = np.mean(gradient)
     a = alfa * avgGrad
-    # [바꾸기 전 버전]
-    # grad_safe = np.maximum(gradient, 1e-4)
-    # scaling_factor = ((grad_safe + noise) / a) ** (beta - 1.0)
 
     mask = gradient > 0
-    safe_grad = np.where(mask, gradient, 1.0)  # 0인 곳은 더미값 1.0 (0^음수 power 연산 오류 방지)
+    safe_grad = np.where(mask, gradient, 1.0)
     scaling_factor = np.where(mask, ((safe_grad + noise) / a) ** (beta - 1.0), 0.0)
     return scaling_factor
 
-def calculate_level_scaling_factor(H, k, alfa, beta, noise):
+
+def calculate_piecewise_scaling_factor(gradient, alfa, beta, xp_ratio, y0):
+    """
+    구간별(Piecewise) 스케일링 팩터를 계산하는 함수.
+    두 번째 구간과 세 번째 구간이 x = a 지점에서 매끄럽게(미분 가능하게) 연결됩니다.
+    
+    Parameters:
+      gradient : np.ndarray, 기울기(gradient) 크기 배열 (x에 해당)
+      xp_ratio : float, 첫 번째 구간과 두 번째 구간의 경계값 비율 (xp = xp_ratio * a)
+      alfa     : float, 원본 Fattal 알고리즘의 alfa 파라미터
+      y0       : float, x = 0 에서의 함수값
+      beta     : float, 원본 Fattal 알고리즘의 감쇠 지수 파라미터
+    """
+    
+    # 0 이하의 값 방지
+    x = np.maximum(gradient, 1e-6)
+    y = np.zeros_like(x)
+    
+    # 원본 알고리즘의 기준에 따라 파라미터 a를 내부에서 자동 계산
+    avg_grad = np.mean(x)
+    a = alfa * avg_grad
+    
+    # xp가 a의 xp_ratio가 되도록 계산
+    xp = xp_ratio * a
+    
+    # --- 1. 첫 번째 구간: 0 < x < xp ---
+    mask1 = x < xp
+    if np.any(mask1):
+        x1 = x[mask1]
+        y[mask1] = -(y0 / (2.0 * xp**2)) * (x1**2) + y0
+
+    # --- 2. 두 번째 구간: xp <= x < a ---
+    mask2 = (xp <= x) & (x < a)
+    if np.any(mask2):
+        x2 = x[mask2]
+        dx = a - xp
+        
+        # 정규화된 매개변수 t
+        t = (x2 - xp) / dx
+        
+        # x = a 에서의 C1 연속성을 위해 경계 조건을 세 번째 구간의 값으로 강제 지정
+        A = y0 / 2.0
+        C = 1.0
+        dy = C - A
+        
+        # 정규화된 미분값 (세 번째 구간의 x = a 미분값 기반)
+        v0 = -(y0 / xp) * dx
+        v1 = ((beta - 1.0) / a) * dx
+        
+        # 유리 함수의 내부 파라미터 계산
+        w = (v0 + v1) / (2.0 * dy)
+        B = A + v0 / (2.0 * w)
+        
+        # t를 이용한 유리 2차 함수 계산
+        inv_t = 1.0 - t
+        numerator = A * (inv_t**2) + 2.0 * w * B * t * inv_t + C * (t**2)
+        denominator = (inv_t**2) + 2.0 * w * t * inv_t + (t**2)
+        
+        y[mask2] = numerator / denominator
+
+    # --- 3. 세 번째 구간: x >= a ---
+    # noise 항이 제거된 기존 Fattal 스케일링 수식 적용
+    mask3 = x >= a
+    if np.any(mask3):
+        y[mask3] = (x[mask3] / a) ** (beta - 1.0)
+
+    return y
+
+
+def calculate_level_scaling_factor(H, k, alfa, beta, noise, xp_ratio, y0):
     G = calculate_gradient_mag(H, k)
-    scaling_factor = calculate_scaling_factor(G, alfa, beta, noise)
+    if k == 3:
+        scaling_factor = calculate_piecewise_scaling_factor(G, alfa, beta, xp_ratio, y0)
+    else:
+        scaling_factor = calculate_scaling_factor(G, alfa, beta, noise)
+
     return scaling_factor
 
+
 def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal):
-    """
-    병렬 처리로 사전에 계산된 scaling_factor 배열을 받아
-    순차적 의존성이 있는 attenuation 행렬 생성 및 업샘플링을 수행합니다.
-    """
     h, w = pyramids[-1].shape
     attenuation = [None] * n_pyramid_levels
 
@@ -178,13 +240,11 @@ def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
     return attenuation[0]
 
 
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, dither_strength=0.0):
+def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, xp_ratio=0.05, y0=6.0):
     utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
-    #detail_level = np.clip(detail_level, 0, 3) #detail level 이상의 피라미드 층만 감쇠 함수를 연산함.
     
-    #TOP_SIZE = 2**8 if fftsolver else 32
-    TOP_SIZE = 2**5 if fftsolver else 32 # orignal : 2** 3
+    TOP_SIZE = 2**5 if fftsolver else 32
 
     minLum = np.min(Y)
     maxLum = np.max(Y)
@@ -192,7 +252,6 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     if scanline_row is not None:
         utils.save_scanline(Y, scanline_row, "1_after_high_pass_filter_HDR_Y", highlight_ranges=highlight_ranges, save_dir=save_dir)
         
-        # 원본 original hdr 이미지의 x방향 gradient 계산 및 저장
         if fftsolver:
             Gx_hdr = np.empty_like(Y)
             Gx_hdr[:, :-1] = (Y[:, 1:] - Y[:, :-1]) * 0.5
@@ -205,12 +264,6 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     # 로그 공간 변환
     H = np.log(100.0 * Y / maxLum + 1e-4)
     utils.print_elapsed("     [tmo] 로그 공간 변환 완료")
-
-    # 입력 내재적 등고선 상쇄를 위한 디더링(노이즈) 주입
-    if dither_strength > 0.0:
-        dither_noise = np.random.uniform(-dither_strength, dither_strength, H.shape)
-        H += dither_noise
-        utils.print_elapsed(f"     [tmo] 입력 디더링 주입 완료 (strength: {dither_strength})")
 
     if scanline_row is not None:
         utils.save_scanline(H, scanline_row, "3_log_space_H", highlight_ranges=highlight_ranges, save_dir=save_dir)
@@ -233,7 +286,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
         futures = []
         for k in range(n_pyramid_levels):
             if k >= detail_level or k == n_pyramid_levels - 1 or not newfattal:
-                futures.append((k, executor.submit(calculate_level_scaling_factor, pyramids[k], k, alfa, beta, noise)))
+                futures.append((k, executor.submit(calculate_level_scaling_factor, pyramids[k], k, alfa, beta, noise, xp_ratio, y0)))
             else:
                 scaling_factor[k] = None
                 
@@ -264,12 +317,10 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
 
     # 기울기 감쇠
     if fftsolver:
-        # Gx 계산 (가로 방향)
         Gx = np.empty_like(H)
         Gx[:, :-1] = (H[:, 1:] - H[:, :-1]) * 0.5 * (attenuation_map[:, 1:] + attenuation_map[:, :-1])
         Gx[:, -1] = (H[:, -2] - H[:, -1]) * 0.5 * (attenuation_map[:, -2] + attenuation_map[:, -1])
         
-        # Gy 계산 (세로 방향)
         Gy = np.empty_like(H)
         Gy[:-1, :] = (H[1:, :] - H[:-1, :]) * 0.5 * (attenuation_map[1:, :] + attenuation_map[:-1, :])
         Gy[-1, :] = (H[-2, :] - H[-1, :]) * 0.5 * (attenuation_map[-2, :] + attenuation_map[-1, :])
@@ -287,7 +338,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     # 다이버전스(발산) 계산
     DivG = Gx + Gy
     DivG[:, 1:] -= Gx[:, :-1]
-    DivG[1:, :] -= Gy[:-1, :] # 0 padding 후 후방차분
+    DivG[1:, :] -= Gy[:-1, :]
 
     if fftsolver:
         DivG[:, 0] += Gx[:, 0]
@@ -310,7 +361,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     gamma = 1.0
     L = np.exp(gamma * U)
 
-    # 백분위수 기반 정규화 (0.1% ~ 99.5%) - ThreadPoolExecutor 병렬 연산
+    # 백분위수 기반 정규화
     cut_min = 0.01 * 0.1
     cut_max = 1.0 - 0.01 * 0.5
     
@@ -330,7 +381,8 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     
     return L
 
-def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, dither_strength=0.0):
+
+def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, pre_hpf_sigma=0.007, xp_ratio=0.05, y0=6.0):
     utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
     if fftsolver:
         newfattal = True
@@ -338,10 +390,16 @@ def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, d
     if opt_noise <= 0.0:
         opt_noise = opt_alpha * 0.01
 
+    if scanline_row is not None:
+        utils.save_scanline(img, scanline_row, "0_original_HDR_Y", highlight_ranges=highlight_ranges, save_dir=save_dir)
+
+    # 1. Original 이미지에 High-Pass Filter 먼저 적용
+    img_filtered = apply_high_pass_filter(img, pre_hpf_sigma=pre_hpf_sigma)
+
     L = tmo_fattal02(
-        img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level,
+        img_filtered, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level,
         scanline_row=scanline_row, highlight_ranges=highlight_ranges, save_dir=save_dir,
-        hpf_sigma=hpf_sigma, dither_strength=dither_strength
+        hpf_sigma=hpf_sigma, xp_ratio=xp_ratio, y0=y0
     )
     utils.print_elapsed("   [pfstmo] tmo_fattal02 연산 완료")
 

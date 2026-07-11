@@ -5,7 +5,10 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from utils import utils
 from fattal import pde_multigrid
@@ -135,13 +138,13 @@ def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
     return attenuation[0]
 
 
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=2**3):
+def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=8):
     utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
     #detail_level = np.clip(detail_level, 0, 3) #detail level 이상의 피라미드 층만 감쇠 함수를 연산함.
     
     #TOP_SIZE = 2**8 if fftsolver else 32
-    TOP_SIZE = pyramid_top_size if fftsolver else 32
+    TOP_SIZE = pyramid_top_size if fftsolver else 32 # originally, TOP_SIZE = 8
 
     minLum = np.min(Y)
     maxLum = np.max(Y)
@@ -236,7 +239,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_s
     
     return L
 
-def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=2**3):
+def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=8):
     utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
     if fftsolver:
         newfattal = True

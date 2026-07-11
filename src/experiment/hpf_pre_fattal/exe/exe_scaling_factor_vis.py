@@ -29,12 +29,12 @@ from experiment.hpf_pre_fattal.fattal.fattal_tmo import (
     calculate_attenuation,
     pfstmo_fattal02
 )
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID
+from experiment.hpf_pre_fattal.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID
 import utils.utils as utils
 
 # ─── 실험 전용 사전 HPF (Pre-HPF) 및 시각화 설정 ───────────────────────────
 # Original 이미지에 적용할 High-Pass Filter sigma 강도를 지정합니다.
-PRE_HPF_SIGMA = 0.010
+PRE_HPF_SIGMA = PARAM_GRID.get('pre_hpf_sigma', [0.010])[0]
 
 # Y축 (Colorbar 범주) 고정 여부 설정:
 # True  : 전체 레벨 및 최종 맵의 글로벌 min/max로 Y축(Colorbar) 고정
@@ -51,7 +51,7 @@ fftsolver = PARAM_GRID['fftsolver'][0]
 detail_level = PARAM_GRID['detail_level'][0]
 hpf_sigma = PARAM_GRID['hpf_sigma'][0]
 
-MSIZE = 8 if fftsolver else 32
+MSIZE = 2**5 if fftsolver else 32
 
 
 def visualize_attenuation_map(att_map, level, save_path, title=None, vmin=None, vmax=None):

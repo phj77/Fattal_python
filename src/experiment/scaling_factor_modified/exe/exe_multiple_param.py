@@ -19,21 +19,12 @@ if hasattr(sys.stdout, 'reconfigure'):
 from experiment.scaling_factor_modified.fattal.fattal_tmo import pfstmo_fattal02
 
 # 파라미터 및 설정 불러오기
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.scaling_factor_modified.config.config import (
+    INPUT_DIR, OUTPUT_DIR, get_parameter_combinations,
+    CROP_Y_RANGE, CROP_X_RANGE
+)
 
 import utils.utils as utils
-
-# ─── 실험 전용 사전 HPF (Pre-HPF) 설정 ─────────────────────────────────────
-# Original 이미지에 적용할 High-Pass Filter sigma 강도를 직접 지정하세요.
-PRE_HPF_SIGMA = 0.010
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
-# 직사각형 크롭 범위: (min_pixel, max_pixel)
-# None으로 설정하면 크롭하지 않고 전체 이미지를 사용합니다.
-CROP_Y_RANGE = (201, 1833)  # 세로 범위 (Y축)
-CROP_X_RANGE = (311, 2982)  # 가로 범위 (X축)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def main():
     utils.start_timer()
@@ -97,7 +88,11 @@ def main():
                 p['opt_alpha'], p['opt_beta'], p['opt_noise'],
                 p['newfattal'], p['fftsolver'], p['detail_level'],
                 hpf_sigma=p.get('hpf_sigma', 0.007),
-                pre_hpf_sigma=PRE_HPF_SIGMA
+                pre_hpf_sigma=p['pre_hpf_sigma'],
+                v0=p.get('v0', 0.01),
+                xp_ratio=p.get('xp_ratio', 0.1),
+                vp=p.get('vp', 6.0),
+                pw=p.get('w', 1)
             )
 
             crop_suffix = ""
@@ -109,7 +104,7 @@ def main():
                 xmin, xmax = max(0, xmin), min(w_orig, xmax)
                 crop_suffix = f"_cropY{ymin}-{ymax}_X{xmin}-{xmax}"
 
-            param_suffix = f"preHpf{PRE_HPF_SIGMA}_a{p['opt_alpha']}_b{p['opt_beta']}_dl{p['detail_level']}{crop_suffix}"
+            param_suffix = f"preHpf{p['pre_hpf_sigma']}_a{p['opt_alpha']}_b{p['opt_beta']}_n{p['opt_noise']}_dl{p['detail_level']}_v0{p.get('v0', 0.01)}_xp{p.get('xp_ratio', 0.1)}_vp{p.get('vp', 6.0)}_w{p.get('w', 1)}{crop_suffix}"
             utils.print_elapsed(f"구간 3 (톤 매핑 연산 완료) - 파라미터: {param_suffix}")
 
             # 포맷 변환 및 클리핑 (8bit 단일 채널 이미지)
@@ -119,7 +114,7 @@ def main():
             utils.print_elapsed("구간 4 (후처리 완료)")
 
             # 식별 가능한 파일명 생성 및 저장
-            save_name = f"3_{param_suffix}.png"
+            save_name = f"{file_name}_{param_suffix}.png"
             save_path = os.path.join(OUTPUT_DIR, save_name)
 
             cv2.imwrite(save_path, out_img_8bit)

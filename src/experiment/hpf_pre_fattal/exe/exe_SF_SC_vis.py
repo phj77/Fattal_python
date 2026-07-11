@@ -31,12 +31,12 @@ from experiment.hpf_pre_fattal.fattal.fattal_tmo import (
     calculate_attenuation,
     pfstmo_fattal02
 )
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID, get_parameter_combinations
+from experiment.hpf_pre_fattal.config.config import INPUT_DIR, OUTPUT_DIR, PARAM_GRID, get_parameter_combinations
 import utils.utils as utils
 
 # ─── 실험 전용 사전 HPF (Pre-HPF) 및 시각화 설정 ───────────────────────────
 # Original 이미지에 적용할 High-Pass Filter sigma 강도
-PRE_HPF_SIGMA = 0.012
+PRE_HPF_SIGMA = PARAM_GRID.get('pre_hpf_sigma', [0.012])[0]
 
 # Scaling Factor Colorbar Y축 범주 고정 여부
 FIX_Y_AXIS = False

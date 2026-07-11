@@ -185,9 +185,9 @@ def calculate_scaling_factor(gradient,alfa,beta,noise):
 
 import numpy as np
 
-def calculate_piecewise_scaling_factor(gradient, alfa, beta, v0=0.01, xp_ratio=0.08, vp=6.0, w=1):
+def calculate_piecewise_scaling_factor(gradient, alfa, beta, v0=0.01, xp_ratio=0.1, vp=6.0, pw=1):
     """
-    단일 피크 조건과 폭 조절(w) 기능이 포함된 스케일링 팩터 계산 함수.
+    단일 피크 조건과 폭 조절(pw) 기능이 포함된 스케일링 팩터 계산 함수.
     
     Args:
         gradient (np.ndarray): 그래디언트 크기 배열
@@ -196,7 +196,7 @@ def calculate_piecewise_scaling_factor(gradient, alfa, beta, v0=0.01, xp_ratio=0
         v0 (float): 그래디언트가 0일 때의 스케일링 값 (노이즈 억제)
         xp_ratio (float): 기준점(a) 대비 피크 위치의 비율 (0.0 < xp_ratio < 1.0)
         vp (float): 피크에서의 최대 스케일링 팩터 값
-        w (float): 좌측 피크 폭 조절 파라미터 (w > 1.0, 기본값 2.0)
+        pw (float): 좌측 피크 폭 조절 파라미터 (pw > 1.0, 기본값 1)
     """
     avgGrad = np.mean(gradient)
     a = alfa * avgGrad
@@ -211,10 +211,10 @@ def calculate_piecewise_scaling_factor(gradient, alfa, beta, v0=0.01, xp_ratio=0
     mask1 = x >= a
     scaling_factor[mask1] = (x[mask1] / a) ** (beta - 1.0)
     
-    # 구간 2: 0 < x < xp (폭 조절 파라미터 w 적용)
+    # 구간 2: 0 < x < xp (폭 조절 파라미터 pw 적용)
     mask2 = (x < xp) & mask
-    # 1.0 - x/xp는 양수이므로 안전하게 w 거듭제곱 연산 가능
-    scaling_factor[mask2] = vp - (vp - v0) * ((1.0 - x[mask2] / xp) ** w)
+    # 1.0 - x/xp는 양수이므로 안전하게 pw 거듭제곱 연산 가능
+    scaling_factor[mask2] = vp - (vp - v0) * ((1.0 - x[mask2] / xp) ** pw)
     
     # 구간 3: xp <= x < a
     mask3 = (x >= xp) & (x < a) & mask
@@ -226,16 +226,12 @@ def calculate_piecewise_scaling_factor(gradient, alfa, beta, v0=0.01, xp_ratio=0
     return np.where(mask, scaling_factor, 0.0)
 #new=============================================
 
-def calculate_level_scaling_factor(H, k, alfa, beta, noise):
+def calculate_level_scaling_factor(H, k, alfa, beta, noise, v0=0.01, xp_ratio=0.1, vp=6.0, pw=1):
     G = calculate_gradient_mag(H, k)
     if k == 3:
-        scaling_factor = calculate_piecewise_scaling_factor(G, alfa, beta)
+        scaling_factor = calculate_piecewise_scaling_factor(G, alfa, beta, v0=v0, xp_ratio=xp_ratio, vp=vp, pw=pw)
     else:
         scaling_factor = calculate_scaling_factor(G, alfa, beta, noise)
-
-    # scaling_factor = calculate_scaling_factor(G, alfa, beta, noise)
-
-    #scaling_factor = calculate_piecewise_scaling_factor(G, alfa, beta)
 
     return scaling_factor
 
@@ -270,7 +266,7 @@ def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
     return attenuation[0]
 
 
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007):
+def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, v0=0.01, xp_ratio=0.1, vp=6.0, pw=1):
     utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
     #detail_level = np.clip(detail_level, 0, 3) #detail level 이상의 피라미드 층만 감쇠 함수를 연산함.
@@ -319,7 +315,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
         futures = []
         for k in range(n_pyramid_levels):
             if k >= detail_level or k == n_pyramid_levels - 1 or not newfattal:
-                futures.append((k, executor.submit(calculate_level_scaling_factor, pyramids[k], k, alfa, beta, noise)))
+                futures.append((k, executor.submit(calculate_level_scaling_factor, pyramids[k], k, alfa, beta, noise, v0, xp_ratio, vp, pw)))
             else:
                 scaling_factor[k] = None
                 
@@ -416,7 +412,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     
     return L
 
-def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, pre_hpf_sigma=0.007):
+def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, pre_hpf_sigma=0.007, v0=0.01, xp_ratio=0.1, vp=6.0, pw=1):
     utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
     if fftsolver:
         newfattal = True
@@ -434,7 +430,7 @@ def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, d
     L = tmo_fattal02(
         img_filtered, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level,
         scanline_row=scanline_row, highlight_ranges=highlight_ranges, save_dir=save_dir,
-        hpf_sigma=hpf_sigma
+        hpf_sigma=hpf_sigma, v0=v0, xp_ratio=xp_ratio, vp=vp, pw=pw
     )
     utils.print_elapsed("   [pfstmo] tmo_fattal02 연산 완료")
 
