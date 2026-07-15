@@ -4,14 +4,20 @@ import numpy as np
 from pathlib import Path
 
 current_file = Path(__file__).resolve()
-project_root = current_file.parents[4] # src/experiment/hpf_pre_fattal/config/config.py -> 4 levels up
+# 0: config.py
+# 1: config
+# 2: scanline
+# 3: experiment
+# 4: src
+# 5: Fattal_python (project_root)
+project_root = current_file.parents[4]
 data_path = project_root / "data" 
 test_path = project_root / "test"
-experiment_result_path = project_root / "experiment_result"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "hard_data")
-OUTPUT_DIR = str(experiment_result_path/"hpf_pre_fattal")
+# scanline의 경우 data/data_one을 기본 입력 디렉토리로 사용합니다.
+INPUT_DIR = str(data_path / "data_one"/"3")
+OUTPUT_DIR = str(test_path / "tmp_seminar" / "scanlines")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -24,18 +30,22 @@ alpha_range_v2 = np.round(np.arange(0.1, 1, 0.1), 2).tolist()
 beta_range_v2 = np.round(np.arange(0.1, 1.00, 0.1), 2).tolist()
 # ───────────────────────────────────────────────────────────────────
 
+# ─── TOP_SIZE 설정 ───────────────────────────────────────────────────
+# fftsolver가 True일 때 사용할 TOP_SIZE (기본값: 8)
+PYRAMID_TOP_SIZE = 2**3
+
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
-    'opt_alpha': alpha_range_v2,
-    'opt_beta': beta_range_v2,
+    'opt_alpha': [0.9],
+    'opt_beta': [0.81],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],
     'detail_level': [0],
     'hpf_sigma': [0.007],
-    'pre_hpf_sigma': [0.004,0.008], #original:0.006
     'pre_gamma': [1.0],
-    'post_gamma': [1.0]
+    'post_gamma': [1.0],
+    'pyramid_top_size': [PYRAMID_TOP_SIZE]
 }
 
 def get_parameter_combinations():
@@ -44,5 +54,8 @@ def get_parameter_combinations():
     """
     keys = PARAM_GRID.keys()
     values = PARAM_GRID.values()
+    # 모든 파라미터 리스트의 데카르트 곱(Cartesian product)을 구합니다.
     combinations = list(itertools.product(*values))
+    
+    # 생성된 조합을 다시 딕셔너리 형태로 매핑하여 반환합니다.
     return [dict(zip(keys, combo)) for combo in combinations]

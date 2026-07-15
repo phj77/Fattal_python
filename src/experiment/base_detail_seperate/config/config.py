@@ -8,18 +8,24 @@ current_file = Path(__file__).resolve()
 project_root = current_file.parents[4]
 data_path = project_root / "data" 
 test_path = project_root / "test"
+experiment_result_path = project_root / "experiment_result"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "data_one"/"2")
-OUTPUT_DIR = str(test_path / "base_detail_seperate"/"2"/"boundary")
+INPUT_DIR = str(data_path / "tmp")
+#OUTPUT_DIR = str(test_path / "base_detail_seperate"/"2"/"boundary")
+OUTPUT_DIR = str(experiment_result_path/"base_detail_seperate"/"tmp")
 
 # ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
 # 직사각형 크롭 범위: (min_pixel, max_pixel)
 # None으로 설정하면 크롭하지 않고 전체 이미지를 사용합니다.
-# CROP_Y_RANGE = (201, 1833)  # 세로 범위 (Y축), 예: (201, 1833); dataset3
-# CROP_X_RANGE = (311, 2982)  # 가로 범위 (X축), 예: (311, 2982)
+CROP_Y_RANGE = (182, 1884)  # 세로 범위 (Y축), 예: (201, 1833); dataset3
+CROP_X_RANGE = (110, 3072)  # 가로 범위 (X축), 예: (311, 2982)
 CROP_Y_RANGE = (256, 334)  # 세로 범위 (Y축) # dataset2
 CROP_X_RANGE = (170, 3072)  # 가로 범위 (X축) # dataset2
+CROP_Y_RANGE = None
+CROP_X_RANGE = None
+# CROP_Y_RANGE = (182, 1884)  # 세로 범위 (Y축) # dataset2
+# CROP_X_RANGE = (110, 3072)  # 가로 범위 (X축) # dataset2
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ─── Guided Filter 파라미터 ─────────────────────────────────────────────────
@@ -43,18 +49,18 @@ beta_range_v2 = np.round(np.arange(0.2, 1.00, 0.1), 2).tolist()
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
     # Fattal 파라미터
-    'opt_alpha': alpha_range_v2,
-    'opt_beta': beta_range_v2,
+    'opt_alpha': [0.8],
+    'opt_beta': [0.8,0.85],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],
     'detail_level': [0],
     'hpf_sigma': [0.007],
     # Guided Filter 파라미터
-    'gf_radius': [16],
-    'gf_eps': [0.001, 0.005, 0.01, 0.05],
+    'gf_radius': [6,10,14],
+    'gf_eps': [0.001, 0.005, 0.01, 0.05], #[0.001, 0.005, 0.01, 0.05]
     # Detail 합성 파라미터
-    'detail_factor': [2,10],
+    'detail_factor': [6],
 }
 
 def get_parameter_combinations():

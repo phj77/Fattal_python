@@ -1,5 +1,5 @@
 # exe_scanline_multiple_param.py
-# config.py에 정의된 여러 파라미터 그리드 조합(alpha, beta 등)에 대해 개별 데이터셋의 스캔라인 프로파일 및 최종 톤 매핑 결과를 비교 분석하기 위해 폴더별로 자동 생성 및 저장해주는 다중 파라미터 배치 실행 스크립트입니다.
+# config.py에 정의된 여러 파라미터 그리드 조합(alpha, beta, y_0 등)에 대해 개별 데이터셋의 스캔라인 프로파일 및 최종 톤 매핑 결과를 비교 분석하기 위해 폴더별로 자동 생성 및 저장해주는 다중 파라미터 배치 실행 스크립트입니다. (scaling_factor_modified2 전용)
 import cv2
 import numpy as np
 import os
@@ -19,14 +19,13 @@ project_root = current_file.parents[4]  # .../Fattal_python root
 if str(src_dir) not in sys.path:
     sys.path.append(str(src_dir))
 
-from experiment.scanline.fattal.fattal_tmo import pfstmo_fattal02
-from experiment.scanline.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.scaling_factor_modified2.fattal.fattal_tmo_scanline import pfstmo_fattal02
+from experiment.scaling_factor_modified2.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 import utils.utils as utils
 
 # Dataset configs mapping scanline row and highlight ranges for default datasets (1~7)
 dataset_configs = {
     1: {"row": 1100, "highlight": [[2310, 2382], [1740, 1825]]},
-    # 2: {"row": 1661, "highlight": [[300, 530], [1868, 1965]]},
     2: {"row": 317, "highlight": [[1880, 1954]]},
     3: {"row": 955,  "highlight": [[533, 622], [1380, 1490], [2260, 2355]]},
     4: {"row": 974,  "highlight": [[457, 475], [590, 607]]},
@@ -167,9 +166,12 @@ def main():
                 newfattal = p.get('newfattal', True)
                 fftsolver = p.get('fftsolver', True)
                 detail_level = p.get('detail_level', 0)
+                hpf_sigma = p.get('hpf_sigma', 0.007)
+                pyramid_top_size = p.get('pyramid_top_size', 8)
+                opt_y_0 = p.get('opt_y_0', 2.0)
 
                 # 각 파라미터 조합별로 독립적인 폴더 생성
-                param_folder_name = f"a{opt_alpha}_b{opt_beta}_dl{detail_level}"
+                param_folder_name = f"a{opt_alpha}_b{opt_beta}_y0{opt_y_0}_dl{detail_level}"
                 if len(hdr_files) > 1:
                     param_save_dir = os.path.join(dataset_output_dir, param_folder_name, file_name)
                 else:
@@ -185,6 +187,9 @@ def main():
                     img_single,
                     opt_alpha, opt_beta, opt_noise,
                     newfattal, fftsolver, detail_level,
+                    hpf_sigma=hpf_sigma,
+                    pyramid_top_size=pyramid_top_size,
+                    opt_y_0=opt_y_0,
                     scanline_row=scanline_row, highlight_ranges=highlight_ranges,
                     save_dir=param_save_dir
                 )

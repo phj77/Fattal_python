@@ -28,7 +28,7 @@ from experiment.scanline.fattal.fattal_tmo import (
     calculate_level_attenuation,
     calculateFiMatrix
 )
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.scanline.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 import utils.utils as utils
 
 # Y축 (Colorbar 범주) 고정 여부 설정:

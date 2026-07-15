@@ -7,12 +7,13 @@ current_file = Path(__file__).resolve()
 project_root = current_file.parents[3]
 data_path = project_root / "data" 
 test_path = project_root / "test"
+experiment_result_path = project_root / "experiment_result"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "data_one"/"3")
+INPUT_DIR = str(data_path/"hard_data")
 #OUTPUT_DIR = str(test_path/"scaling_factor_visualization"/"detail_level_0")
 # OUTPUT_DIR = str(test_path/"scanline"/"vertical")
-OUTPUT_DIR = str(test_path/"image_crop"/"3")
+OUTPUT_DIR = str(experiment_result_path/"tmp")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -33,8 +34,8 @@ PYRAMID_TOP_SIZE = 2**3
 
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
-    'opt_alpha': [0.9],
-    'opt_beta': [0.81],
+    'opt_alpha': [0.8],
+    'opt_beta': [0.81,0.82,0.83,0.84,0.85,0.86,0.87,0.88,0.89],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],

@@ -1,6 +1,3 @@
-# fattal_tmo.py
-# 이 스크립트는 Fattal 톤 매핑 연산 과정 중 중간 결과물(Luminance, log-space H, Gradient, Attenuated Gradient 등)의 스캔라인 정보를 기본 범위(각각 개별적인 Y축 스케일)로 추출 및 저장하는 기능을 갖춘 기본 Fattal TMO 알고리즘 구현체입니다.
-
 import numpy as np
 import scipy.fft as fft
 import cv2
@@ -8,11 +5,12 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-# Add 'src' directory to sys.path to ensure correct imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from utils import utils
-from fattal import pde_multigrid
 from fattal import pde_fft
 
 
@@ -36,24 +34,28 @@ def gaussianBlur(I):
 
     return L
 
-#same
+#same; Gaussian pyramid 만들때 avg pooling, blur를 둘 다 사용할 필요 있나?
 def downSample(A):
+    # Original in LuminanceHDR
     h, w = A.shape
     nh, nw = h // 2, w // 2
     B = (A[0:2*nh:2, 0:2*nw:2] + A[1:2*nh:2, 0:2*nw:2] + 
          A[0:2*nh:2, 1:2*nw:2] + A[1:2*nh:2, 1:2*nw:2]) * 0.25
+
+    # downsample by sampling
+    # B = A[::2, ::2]
     return B
 
 #new!
-def createGaussianPyramids(H, nlevels):
+def createGaussianPyramids(H, n_pyramid_levels):
     """C++의 createGaussianPyramids를 정확히 재현"""
     pyramids = [H]
     L = gaussianBlur(H)  # 먼저 블러
 
-    for k in range(1, nlevels):
+    for k in range(1, n_pyramid_levels):
         down = downSample(L)          # 블러된 이미지를 다운샘플
         pyramids.append(down)
-        if k < nlevels - 1:
+        if k < n_pyramid_levels - 1:
             L = gaussianBlur(down)    # 다음 레벨을 위해 블러
         # 마지막 레벨은 추가 blur 불필요 (다음 단계 없음)
 
@@ -86,56 +88,69 @@ def calculate_gradient_mag(H, k):
     G = np.sqrt(gx**2 + gy**2)
     return G
 
-def calculate_attenuation(gradient,alfa,beta,noise,k):
+def calculate_scaling_factor(gradient, alfa, beta, noise, opt_y_0):
     avgGrad = np.mean(gradient)
-    grad_safe = np.maximum(gradient, 1e-4)
     a = alfa * avgGrad
-    attenuation = ((grad_safe + noise) / a) ** (beta - 1.0)
-    return attenuation
+    
+    safe_grad = np.maximum(gradient, 0.0)
+    mask_ge = gradient >= a
+    mask_less = gradient < a
+    
+    # a 이상의 경우: 원래 식 적용
+    scaling_factor_ge = np.where(mask_ge, ((safe_grad + noise) / a) ** (beta - 1.0), 0.0)
+    
+    # a 미만의 경우: 새로운 함수 적용
+    exponent = (1.0 - beta) / (opt_y_0 - 1.0)
+    # y_0 - (y_0 - 1) * (x/a)^((1-beta)/(y_0-1))
+    scaling_factor_less = np.where(mask_less, opt_y_0 - (opt_y_0 - 1.0) * ((safe_grad / a) ** exponent), 0.0)
+    
+    scaling_factor = scaling_factor_ge + scaling_factor_less
+    return scaling_factor
 
-def calculate_level_attenuation(H, k, alfa, beta, noise):
+def calculate_level_scaling_factor(H, k, alfa, beta, noise, opt_y_0):
     G = calculate_gradient_mag(H, k)
-    attenuation = calculate_attenuation(G, alfa, beta, noise,k)
+    scaling_factor = calculate_scaling_factor(G, alfa, beta, noise, opt_y_0)
 
-    return attenuation
+    return scaling_factor
 
-def calculateFiMatrix(values, pyramids, nlevels, newfattal):
+def calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal):
     """
-    병렬 처리로 사전에 계산된 values 배열을 받아
-    순차적 의존성이 있는 FI 행렬 생성 및 업샘플링을 수행합니다.
+    병렬 처리로 사전에 계산된 scaling_factor 배열을 받아
+    순차적 의존성이 있는 attenuation 행렬 생성 및 업샘플링을 수행합니다.
     """
     h, w = pyramids[-1].shape
-    fi = [None] * nlevels
+    attenuation = [None] * n_pyramid_levels
 
     if newfattal:
-        fi[-1] = np.ones((h, w), dtype=np.float32)
+        attenuation[-1] = np.ones((h, w), dtype=np.float32)
     else:
-        fi[-1] = np.empty((h, w), dtype=np.float32) 
+        attenuation[-1] = np.empty((h, w), dtype=np.float32) 
 
-    for k in range(nlevels - 1, -1, -1):
-        if values[k] is not None:
+    for k in range(n_pyramid_levels - 1, -1, -1):
+        if scaling_factor[k] is not None:
             if newfattal:
-                fi[k] *= values[k]
+                attenuation[k] *= scaling_factor[k]
             else:
-                fi[k] = values[k]
+                attenuation[k] = scaling_factor[k]
                 
         if k > 0:
             target_shape = pyramids[k-1].shape
             if newfattal:
-                up = upSample(fi[k], target_shape)
-                fi[k-1] = gaussianBlur(up)
+                up = upSample(attenuation[k], target_shape)
+                attenuation[k-1] = gaussianBlur(up)
             else:
-                fi[k-1] = np.empty(target_shape, dtype=np.float32)
+                attenuation[k-1] = np.empty(target_shape, dtype=np.float32)
 
-    return fi[0]
+    return attenuation[0]
 
 
-def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, scanline_col=None):
+def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=2**3, opt_y_0=2.0, scanline_row=None, highlight_ranges=None, save_dir=None, scanline_col=None):
     utils.print_elapsed("     [tmo] 시작")
     h, w = Y.shape
     #detail_level = np.clip(detail_level, 0, 3) #detail level 이상의 피라미드 층만 감쇠 함수를 연산함.
     
-    MSIZE = 8 if fftsolver else 32
+    #TOP_SIZE = 2**8 if fftsolver else 32
+    TOP_SIZE = pyramid_top_size if fftsolver else 32
 
     minLum = np.min(Y)
     maxLum = np.max(Y)
@@ -179,31 +194,31 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
 
     # 가우시안 피라미드 구성 
     mins = min(w, h)
-    nlevels = 0
+    n_pyramid_levels = 0
     temp_mins = mins
-    while temp_mins >= MSIZE:
-        nlevels += 1
+    while temp_mins >= TOP_SIZE:
+        n_pyramid_levels += 1
         temp_mins //= 2
-    if nlevels == 0: nlevels = 1
+    if n_pyramid_levels == 0: n_pyramid_levels = 1
 
-    pyramids = createGaussianPyramids(H, nlevels)
+    pyramids = createGaussianPyramids(H, n_pyramid_levels)
     utils.print_elapsed("     [tmo] 가우시안 피라미드 구성 완료")
 
     # value 행렬 병렬 계산
-    attenuation = [None] * nlevels
-    with ThreadPoolExecutor(max_workers=nlevels) as executor:
+    scaling_factor = [None] * n_pyramid_levels
+    with ThreadPoolExecutor(max_workers=n_pyramid_levels) as executor:
         futures = []
-        for k in range(nlevels):
-            if k >= detail_level or k == nlevels - 1 or not newfattal:
-                futures.append((k, executor.submit(calculate_level_attenuation, pyramids[k], k, alfa, beta, noise)))
+        for k in range(n_pyramid_levels):
+            if k >= detail_level or k == n_pyramid_levels - 1 or not newfattal:
+                futures.append((k, executor.submit(calculate_level_scaling_factor, pyramids[k], k, alfa, beta, noise, opt_y_0)))
             else:
-                attenuation[k] = None
+                scaling_factor[k] = None
                 
         for k, future in futures:
-            attenuation[k] = future.result()
+            scaling_factor[k] = future.result()
 
     # FI 행렬 계산
-    FI = calculateFiMatrix(attenuation, pyramids, nlevels, newfattal)
+    attenuation_map = calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
     utils.print_elapsed("     [tmo] FI 행렬 및 그래디언트 계산 완료")
 
     if scanline_row is not None or scanline_col is not None:
@@ -234,18 +249,18 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     if fftsolver:
         # Gx 계산 (가로 방향)
         Gx = np.empty_like(H)
-        Gx[:, :-1] = (H[:, 1:] - H[:, :-1]) * 0.5 * (FI[:, 1:] + FI[:, :-1])
-        Gx[:, -1] = (H[:, -2] - H[:, -1]) * 0.5 * (FI[:, -2] + FI[:, -1])
+        Gx[:, :-1] = (H[:, 1:] - H[:, :-1]) * 0.5 * (attenuation_map[:, 1:] + attenuation_map[:, :-1])
+        Gx[:, -1] = (H[:, -2] - H[:, -1]) * 0.5 * (attenuation_map[:, -2] + attenuation_map[:, -1])
         
         # Gy 계산 (세로 방향)
         Gy = np.empty_like(H)
-        Gy[:-1, :] = (H[1:, :] - H[:-1, :]) * 0.5 * (FI[1:, :] + FI[:-1, :])
-        Gy[-1, :] = (H[-2, :] - H[-1, :]) * 0.5 * (FI[-2, :] + FI[-1, :])
+        Gy[:-1, :] = (H[1:, :] - H[:-1, :]) * 0.5 * (attenuation_map[1:, :] + attenuation_map[:-1, :])
+        Gy[-1, :] = (H[-2, :] - H[-1, :]) * 0.5 * (attenuation_map[-2, :] + attenuation_map[-1, :])
     else:
         e = np.minimum(np.arange(w) + 1, w - 1)
         s = np.minimum(np.arange(h) + 1, h - 1)
-        Gx = (H[:, e] - H) * FI
-        Gy = (H[s, :] - H) * FI
+        Gx = (H[:, e] - H) * attenuation_map
+        Gy = (H[s, :] - H) * attenuation_map
 
     if scanline_row is not None or scanline_col is not None:
         G_att = np.sqrt(Gx**2 + Gy**2)
@@ -271,6 +286,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
     if fftsolver:
         U = pde_fft.solve_pde_fft(DivG, hpf_sigma=hpf_sigma)
     else:
+        from fattal import pde_multigrid
         U = np.zeros_like(DivG)
         U = pde_multigrid.solve_pde_multigrid(DivG, U)
     utils.print_elapsed("     [tmo] PDE 풀이 완료")
@@ -293,7 +309,7 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
         future_max = executor.submit(np.percentile, L, cut_max * 100)
         min_val = future_min.result()
         max_val = future_max.result()
-    print(max_val - min_val)
+
     L = (L - min_val) / (max_val - min_val)
     L = np.clip(L, 0, 1)
 
@@ -301,20 +317,20 @@ def tmo_fattal02(Y, alfa, beta, noise, newfattal, fftsolver, detail_level, scanl
         utils.save_scanline(L, scanline_row, "7_final_LDR_L", highlight_ranges=highlight_ranges, save_dir=save_dir, ylim=[0.0, 0.95])
     if scanline_col is not None:
         utils.save_vertical_scanline(L, scanline_col, "7_final_LDR_L", highlight_ranges=highlight_ranges, save_dir=save_dir)
-        
-    utils.print_elapsed("     [tmo] 히스토그램 평활화 및 정규화 완료")
+
+    utils.print_elapsed("     [tmo] 정규화 완료")
     
     return L
 
-def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, scanline_row=None, highlight_ranges=None, save_dir=None, hpf_sigma=0.007, scanline_col=None):
-    utils.print_elapsed("   [pfstmo] 시작")
+def pfstmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=0.007, pyramid_top_size=2**3, opt_y_0=2.0, scanline_row=None, highlight_ranges=None, save_dir=None, scanline_col=None):
+    utils.print_elapsed("   [pfstmo] 시작 (RGB to Y 변환)")
     if fftsolver:
         newfattal = True
 
     if opt_noise <= 0.0:
         opt_noise = opt_alpha * 0.01
 
-    L = tmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, scanline_row, highlight_ranges, save_dir=save_dir, hpf_sigma=hpf_sigma, scanline_col=scanline_col)
+    L = tmo_fattal02(img, opt_alpha, opt_beta, opt_noise, newfattal, fftsolver, detail_level, hpf_sigma=hpf_sigma, pyramid_top_size=pyramid_top_size, opt_y_0=opt_y_0, scanline_row=scanline_row, highlight_ranges=highlight_ranges, save_dir=save_dir, scanline_col=scanline_col)
     utils.print_elapsed("   [pfstmo] tmo_fattal02 연산 완료")
 
     return L

@@ -195,18 +195,18 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
     fig, ax = plt.subplots(figsize=(16, 6), dpi=300)
     
     # 얇고 세밀한 파란색 라인으로 플롯
-    ax.plot(scanline, color='black', linewidth=0.5, alpha=1)
+    ax.plot(scanline, color='black', linewidth=0.8, alpha=1)
     
     # 구간 하이라이팅 (axvspan 사용)
-    has_highlight = False
-    if highlight_ranges is not None:
-        for rng in highlight_ranges:
-            if len(rng) == 2:
-                start, end = rng
-                start = max(0, min(start, len(scanline) - 1))
-                end = max(0, min(end, len(scanline) - 1))
-                ax.axvspan(start, end, color='#ffa500', alpha=0.25)
-                has_highlight = True
+    # has_highlight = False
+    # if highlight_ranges is not None:
+    #     for rng in highlight_ranges:
+    #         if len(rng) == 2:
+    #             start, end = rng
+    #             start = max(0, min(start, len(scanline) - 1))
+    #             end = max(0, min(end, len(scanline) - 1))
+    #             ax.axvspan(start, end, color='#ffa500', alpha=0.25)
+    #             has_highlight = True
                 
     # 타이틀 및 라벨 설정
     ax.set_title(f"Scanline Intensity at Row {row_index} - {stage_name}", fontsize=14, pad=15, fontweight='bold')
@@ -218,8 +218,8 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
     ax.yaxis.set_minor_locator(AutoMinorLocator())
     
     # 주 그리드(Major Grid)와 보조 그리드(Minor Grid)를 각각 다르게 렌더링
-    ax.grid(True, which='major', color='#d3d3d3', linestyle='-', linewidth=0.6)
-    ax.grid(True, which='minor', color='#e5e5e5', linestyle=':', linewidth=0.4)
+    #ax.grid(True, which='major', color='#d3d3d3', linestyle='-', linewidth=0.6)
+    #ax.grid(True, which='minor', color='#e5e5e5', linestyle=':', linewidth=0.4)
     
     # 통계 정보(Min, Max, Mean) 박스를 우측 상단에 표시
     s_min = np.min(scanline)
@@ -236,9 +236,9 @@ def save_scanline(image, row_index, stage_name, highlight_ranges=None, save_dir=
     ax.set_xlim(0, len(scanline) - 1)
     
     # 통계 텍스트 상자 배치
-    ax.text(0.98, 0.95, stats_text, transform=ax.transAxes, verticalalignment='top', horizontalalignment='right',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffffff', edgecolor='#cccccc', alpha=0.8),
-            fontsize=9, family='monospace')
+    #ax.text(0.98, 0.95, stats_text, transform=ax.transAxes, verticalalignment='top', horizontalalignment='right',
+    #        bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffffff', edgecolor='#cccccc', alpha=0.8),
+    #        fontsize=9, family='monospace')
             
     # 레이아웃 최적화
     plt.tight_layout()

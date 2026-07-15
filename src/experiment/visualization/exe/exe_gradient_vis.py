@@ -12,15 +12,17 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Setup paths and import packages
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_file = Path(__file__).resolve()
+src_dir = current_file.parents[3]  # .../Fattal_python/src
+project_root = current_file.parents[4]  # .../Fattal_python root
+if str(src_dir) not in sys.path:
+    sys.path.append(str(src_dir))
 
 from fattal.fattal_tmo import createGaussianPyramids, calculate_gradient_mag
 from processing.gamma_correction import Frame, apply_gamma_frame
 import utils.utils as utils
 
 # --- Path setup ---
-current_file = Path(__file__).resolve()
-project_root = current_file.parents[2]  # Fattal_python root
 DATA_DIR = project_root / "data" / "data_one"
 OUTPUT_DIR = project_root / "test" / "gradient_pyramid"
 

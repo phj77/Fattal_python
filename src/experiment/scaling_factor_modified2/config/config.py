@@ -9,10 +9,10 @@ data_path = project_root / "data"
 test_path = project_root / "test"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "data_one"/"7")
+INPUT_DIR = str(data_path / "data_one"/"3")
 #OUTPUT_DIR = str(test_path/"scaling_factor_visualization"/"detail_level_0")
 # OUTPUT_DIR = str(test_path/"scanline"/"vertical")
-OUTPUT_DIR = str(test_path/"scaling_factor_modified_0711"/"7"/"a0.9b0.8top_pyramid8")
+OUTPUT_DIR = str(test_path/"tmp3"/"sc_md_scanline")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -35,9 +35,9 @@ PYRAMID_TOP_SIZE = 2**3
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
     'opt_alpha': [0.9],
-    'opt_beta': [0.8],
+    'opt_beta': [0.81],
     'opt_noise': [0.001],
-    'opt_y_0': att_range, # 2-beta에서 x<a는 직선, y_0>1
+    'opt_y_0': [1.2], # 2-beta에서 x<a는 직선, y_0>1
     'newfattal': [True],
     'fftsolver': [True],
     'detail_level': [0],

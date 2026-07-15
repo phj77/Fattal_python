@@ -16,7 +16,7 @@ src_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 sys.path.append(src_dir)
 
 from experiment.scanline.fattal.fattal_tmo import pfstmo_fattal02
-from exe.config.config import INPUT_DIR, OUTPUT_DIR
+from experiment.scanline.config.config import INPUT_DIR, OUTPUT_DIR
 import utils.utils as utils
 
 def main():
