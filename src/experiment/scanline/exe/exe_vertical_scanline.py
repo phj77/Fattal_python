@@ -47,11 +47,11 @@ def main():
     # 3, 4, 5번 이외의 데이터셋은 세로 스캔라인 추출 설정을 비워둡니다 (col: None).
     dataset_configs = {
         1: {"alpha": 0.9, "beta": 0.82, "col": None, "highlight": None},
-        2: {"alpha": 0.9, "beta": 0.80, "col": None, "highlight": None},
+        2: {"alpha": 0.9, "beta": 0.80, "col": 1915, "highlight": [[234, 341]]},
         3: {"alpha": 0.9, "beta": 0.81, "col": 2311, "highlight": [[206, 328], [1716, 1815]]},
         4: {"alpha": 0.9, "beta": 0.84, "col": 2486, "highlight": [[275, 377], [1662, 1730]]},
         5: {"alpha": 0.3, "beta": 0.93, "col": 1348, "highlight": [[695, 848]]},
-        6: {"alpha": 0.9, "beta": 0.81, "col": None, "highlight": None},
+        6: {"alpha": 0.9, "beta": 0.81, "col": 2142, "highlight": [[320, 394]]},
         7: {"alpha": 0.9, "beta": 0.80, "col": None, "highlight": None}
     }
 

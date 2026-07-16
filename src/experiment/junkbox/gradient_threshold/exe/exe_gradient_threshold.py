@@ -9,13 +9,13 @@ from pathlib import Path
 CURRENT_DIR = Path(__file__).resolve().parent
 EXPERIMENT_DIR = CURRENT_DIR.parent
 EXPERIMENTS_ROOT = EXPERIMENT_DIR.parent
-SRC_DIR = EXPERIMENTS_ROOT.parent
+SRC_DIR = EXPERIMENTS_ROOT.parent.parent
 PROJECT_ROOT = SRC_DIR.parent
 
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from experiment.gradient_threshold.core.gradient_mask import load_hdr_image, generate_low_gradient_mask
+from experiment.junkbox.gradient_threshold.core.gradient_mask import load_hdr_image, generate_low_gradient_mask
 
 def visualize_gradient_threshold(img_path: Path, threshold: float = 5.0):
     """

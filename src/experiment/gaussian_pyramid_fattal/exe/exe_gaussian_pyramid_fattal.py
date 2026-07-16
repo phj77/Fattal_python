@@ -19,7 +19,7 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from fattal.fattal_tmo import gaussianBlur, downSample, pfstmo_fattal02
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.gaussian_pyramid_fattal.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 import utils.utils as utils
 
 

@@ -4,21 +4,24 @@ import numpy as np
 from pathlib import Path
 
 current_file = Path(__file__).resolve()
-# 0: config.py
-# 1: config
-# 2: scanline
-# 3: experiment
-# 4: src
-# 5: Fattal_python (project_root)
-project_root = current_file.parents[4]
-data_path = project_root / "data" 
+
+# Find project root dynamically by climbing up parents
+project_root = None
+for p in current_file.parents:
+    if (p / ".git").exists() or ((p / "src").exists() and (p / "data").exists()):
+        project_root = p
+        break
+if project_root is None:
+    project_root = current_file.parents[4]
+
+data_path = project_root / "data"
 test_path = project_root / "test"
-experiment_result_path = project_root / "experiment_result" 
 
 # 입출력 디렉토리 설정
-# scanline의 경우 data/data_one을 기본 입력 디렉토리로 사용합니다.
 INPUT_DIR = str(data_path / "data_one")
-OUTPUT_DIR = str(experiment_result_path / "scanline" / "vertical_scanline")
+# Get experiment folder name dynamically
+exp_name = current_file.parents[1].name
+OUTPUT_DIR = str(test_path / exp_name)
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -55,8 +58,5 @@ def get_parameter_combinations():
     """
     keys = PARAM_GRID.keys()
     values = PARAM_GRID.values()
-    # 모든 파라미터 리스트의 데카르트 곱(Cartesian product)을 구합니다.
     combinations = list(itertools.product(*values))
-    
-    # 생성된 조합을 다시 딕셔너리 형태로 매핑하여 반환합니다.
     return [dict(zip(keys, combo)) for combo in combinations]

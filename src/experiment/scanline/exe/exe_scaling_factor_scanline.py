@@ -37,15 +37,36 @@ import utils.utils as utils
 FIX_Y_AXIS = False
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Dataset configs mapping scanline row and highlight ranges for default datasets (1~7)
+# Dataset configs mapping scanline row/column and highlight ranges for default datasets (1~7)
 dataset_configs = {
-    1: {"row": 1100, "highlight": [[2310, 2382], [1740, 1825]]},
-    2: {"row": 1661, "highlight": [[300, 530], [1868, 1965]]},
-    3: {"row": 955,  "highlight": [[533, 622], [1380, 1490], [2260, 2355]]},
-    4: {"row": 974,  "highlight": [[457, 475], [590, 607]]},
-    5: {"row": 1170, "highlight": [[2073, 2188]]},
-    6: {"row": 1590, "highlight": [[400, 620], [2095, 2190]]},
-    7: {"row": 1338, "highlight": [[1295, 1360], [2570, 2650]]}
+    1: {
+        "row": 1100, "row_highlight": [[2310, 2382], [1740, 1825]],
+        "col": None, "col_highlight": None
+    },
+    2: {
+        "row": 1661, "row_highlight": [[300, 530], [1868, 1965]],
+        "col": 1915, "col_highlight": [[234, 341]]
+    },
+    3: {
+        "row": 955,  "row_highlight": [[533, 622], [1380, 1490], [2260, 2355]],
+        "col": 2311, "col_highlight": [[206, 328], [1725, 1825]]
+    },
+    4: {
+        "row": 974,  "row_highlight": [[457, 475], [590, 607]],
+        "col": 2486, "col_highlight": [[275, 377], [1662, 1730]]
+    },
+    5: {
+        "row": 1170, "row_highlight": [[2073, 2188]],
+        "col": 1348, "col_highlight": [[695, 848]]
+    },
+    6: {
+        "row": 1590, "row_highlight": [[400, 620], [2095, 2190]],
+        "col": 2142, "col_highlight": [[320, 394]]
+    },
+    7: {
+        "row": 1338, "row_highlight": [[1295, 1360], [2570, 2650]],
+        "col": None, "col_highlight": None
+    }
 }
 
 
@@ -69,7 +90,7 @@ def validate_and_get_dataset_dirs(input_dir):
     subdirs = [os.path.join(norm_input_dir, d) for d in os.listdir(norm_input_dir)
                if os.path.isdir(os.path.join(norm_input_dir, d))]
 
-    valid_dataset_dirs = []
+    valid_dataset_dirs = [] 
     for sd in subdirs:
         sub_hdr = glob.glob(os.path.join(sd, '*.hdr'))
         if sub_hdr:
@@ -86,17 +107,15 @@ def validate_and_get_dataset_dirs(input_dir):
 
 
 def get_scanline_config(input_dir_path, img_shape):
-    """Determine scanline row and highlight ranges based on input directory name."""
+    """Determine scanline row, col, and highlight ranges based on input directory name."""
     dir_name = os.path.basename(os.path.normpath(input_dir_path))
     if dir_name.isdigit() and int(dir_name) in dataset_configs:
         cfg = dataset_configs[int(dir_name)]
-        return cfg["row"], cfg["highlight"]
+        return cfg["row"], cfg["row_highlight"], cfg["col"], cfg["col_highlight"]
     
-    return img_shape[0] // 2, None
-
-
-def visualize_attenuation_map_with_scanline(att_map, level, scanline_row, save_path, title=None, vmin=None, vmax=None):
-    """Visualize a single scaling factor / attenuation map as a colormap with the scanline row highlighted."""
+    return img_shape[0] // 2, None, None, None
+def visualize_attenuation_map_with_scanline(att_map, level, scanline_row, scanline_col, save_path, title=None, vmin=None, vmax=None):
+    """Visualize a single scaling factor / attenuation map as a colormap with the scanline row/column highlighted."""
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
     im = ax.imshow(att_map, cmap='viridis', aspect='auto', vmin=vmin, vmax=vmax)
@@ -104,15 +123,28 @@ def visualize_attenuation_map_with_scanline(att_map, level, scanline_row, save_p
     cbar.set_label('Scaling Factor (Attenuation) Value', fontsize=12)
 
     # Draw horizontal red dashed line for the scanline row
-    ax.axhline(y=scanline_row, color='red', linestyle='--', linewidth=1.5, label=f'Scanline Row {scanline_row}')
-    ax.legend(loc='upper right')
+    handles = []
+    if scanline_row is not None:
+        line_h = ax.axhline(y=scanline_row, color='red', linestyle='--', linewidth=1.5, label=f'Scanline Row {scanline_row}')
+        handles.append(line_h)
+    if scanline_col is not None:
+        line_v = ax.axvline(x=scanline_col, color='blue', linestyle='--', linewidth=1.5, label=f'Scanline Col {scanline_col}')
+        handles.append(line_v)
+    if handles:
+        ax.legend(handles=handles, loc='upper right')
 
     if title:
         ax.set_title(title, fontsize=14, fontweight='bold')
     elif level >= 0:
-        ax.set_title(f'Scaling Factor Map - Level {level} (Row {scanline_row})', fontsize=14, fontweight='bold')
+        parts = []
+        if scanline_row is not None: parts.append(f"Row {scanline_row}")
+        if scanline_col is not None: parts.append(f"Col {scanline_col}")
+        ax.set_title(f'Scaling Factor Map - Level {level} ({", ".join(parts)})', fontsize=14, fontweight='bold')
     else:
-        ax.set_title(f'Final Combined Attenuation Map (Row {scanline_row})', fontsize=14, fontweight='bold')
+        parts = []
+        if scanline_row is not None: parts.append(f"Row {scanline_row}")
+        if scanline_col is not None: parts.append(f"Col {scanline_col}")
+        ax.set_title(f'Final Combined Attenuation Map ({", ".join(parts)})', fontsize=14, fontweight='bold')
 
     ax.set_xlabel('Width (pixels)', fontsize=11)
     ax.set_ylabel('Height (pixels)', fontsize=11)
@@ -176,8 +208,8 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
         img_single = img
 
     # Get scanline config
-    scanline_row, highlight_ranges = get_scanline_config(ds_dir, img.shape)
-    print(f"  스캔라인 설정 -> Row: {scanline_row}, Highlight: {highlight_ranges}")
+    scanline_row, row_highlight, scanline_col, col_highlight = get_scanline_config(ds_dir, img.shape)
+    print(f"  스캔라인 설정 -> Row: {scanline_row}, Col: {scanline_col}")
 
     # 1. Log-space transform
     max_lum = np.max(img_single)
@@ -228,36 +260,67 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
             row_k = int(round(scanline_row / scale_factor))
             row_k = np.clip(row_k, 0, ph - 1)
 
+            col_k = None
+            if scanline_col is not None:
+                col_k = int(round(scanline_col / scale_factor))
+                col_k = np.clip(col_k, 0, pw - 1)
+
             # Highlight range scaling
-            highlight_ranges_k = []
-            if highlight_ranges is not None:
-                for rng in highlight_ranges:
+            row_highlight_k = []
+            if row_highlight is not None:
+                for rng in row_highlight:
                     if len(rng) == 2:
                         start_k = int(round(rng[0] / scale_factor))
                         end_k = int(round(rng[1] / scale_factor))
                         start_k = np.clip(start_k, 0, pw - 1)
                         end_k = np.clip(end_k, 0, pw - 1)
-                        highlight_ranges_k.append([start_k, end_k])
+                        row_highlight_k.append([start_k, end_k])
 
-            # 6-1. Save 2D map with scanline line
+            col_highlight_k = []
+            if col_highlight is not None:
+                for rng in col_highlight:
+                    if len(rng) == 2:
+                        start_k = int(round(rng[0] / scale_factor))
+                        end_k = int(round(rng[1] / scale_factor))
+                        start_k = np.clip(start_k, 0, ph - 1)
+                        end_k = np.clip(end_k, 0, ph - 1)
+                        col_highlight_k.append([start_k, end_k])
+
+            # 6-1. Save 2D map with scanline line(s)
             map_name = f"scaling_factor_level_{k:02d}_{pw}x{ph}_with_line.png"
             map_path = save_dir / map_name
+            title_parts = [f"size={pw}x{ph}"]
+            if row_k is not None: title_parts.append(f"row={row_k}")
+            if col_k is not None: title_parts.append(f"col={col_k}")
             title = (
                 f'Fattal SF Map - Level {k}/{nlevels-1}\n'
-                f'(alpha={opt_alpha}, beta={opt_beta}, size={pw}x{ph}, scanline_row={row_k})'
+                f'(alpha={opt_alpha}, beta={opt_beta}, {", ".join(title_parts)})'
             )
-            visualize_attenuation_map_with_scanline(att, k, row_k, str(map_path), title=title, vmin=vmin, vmax=vmax)
+            visualize_attenuation_map_with_scanline(att, k, row_k, col_k, str(map_path), title=title, vmin=vmin, vmax=vmax)
 
-            # 6-2. Save 1D Scanline profile (PNG & NPY) using utils.save_scanline
+            # 6-2. Save 1D Scanline profiles (PNG & NPY)
             stage_name = f"scaling_factor_level_{k:02d}"
             utils.save_scanline(
                 att,
                 row_index=row_k,
                 stage_name=stage_name,
-                highlight_ranges=highlight_ranges_k,
+                highlight_ranges=row_highlight_k,
                 save_dir=str(save_dir)
             )
-            print(f"    Level {k:2d}: Saved scanline and map at row {row_k} (size: {pw}x{ph})")
+            if col_k is not None:
+                utils.save_vertical_scanline(
+                    att,
+                    col_index=col_k,
+                    stage_name=stage_name,
+                    highlight_ranges=col_highlight_k,
+                    save_dir=str(save_dir)
+                )
+            
+            log_msg = f"    Level {k:2d}: Saved scanline and map at row {row_k}"
+            if col_k is not None:
+                log_msg += f", col {col_k}"
+            log_msg += f" (size: {pw}x{ph})"
+            print(log_msg)
         else:
             print(f"    Level {k:2d}: (skipped, below detail_level={detail_level})")
 
@@ -265,21 +328,32 @@ def process_single_image(img_path, ds_dir, base_output_dir, param):
     fh, fw = final_att.shape
     final_map_name = f"attenuation_final_combined_{fw}x{fh}_with_line.png"
     final_map_path = save_dir / final_map_name
+    title_parts = [f"size={fw}x{fh}"]
+    if scanline_row is not None: title_parts.append(f"row={scanline_row}")
+    if scanline_col is not None: title_parts.append(f"col={scanline_col}")
     final_title = (
         f'Fattal Final Combined Attenuation Map (Phi)\n'
-        f'(alpha={opt_alpha}, beta={opt_beta}, size={fw}x{fh}, scanline_row={scanline_row})'
+        f'(alpha={opt_alpha}, beta={opt_beta}, {", ".join(title_parts)})'
     )
-    visualize_attenuation_map_with_scanline(final_att, -1, scanline_row, str(final_map_path), title=final_title, vmin=vmin, vmax=vmax)
+    visualize_attenuation_map_with_scanline(final_att, -1, scanline_row, scanline_col, str(final_map_path), title=final_title, vmin=vmin, vmax=vmax)
 
-    # Save final combined map 1D scanline profile
+    # Save final combined map 1D scanline profiles
     utils.save_scanline(
         final_att,
         row_index=scanline_row,
         stage_name="final_combined_attenuation_map",
-        highlight_ranges=highlight_ranges,
+        highlight_ranges=row_highlight,
         save_dir=str(save_dir)
     )
-    print(f"    [Final Combined] Saved scanline and map at row {scanline_row} (size: {fw}x{fh})")
+    if scanline_col is not None:
+        utils.save_vertical_scanline(
+            final_att,
+            col_index=scanline_col,
+            stage_name="final_combined_attenuation_map",
+            highlight_ranges=col_highlight,
+            save_dir=str(save_dir)
+        )
+    print(f"    [Final Combined] Saved scanlines and map (size: {fw}x{fh})")
 
 
 def main():

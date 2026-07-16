@@ -18,7 +18,7 @@ if src_dir not in sys.path:
 from experiment.gaussian_pre_fattal.fattal.fattal_tmo import pfstmo_fattal02
 
 # 파라미터 및 설정 불러오기 (config.py의 INPUT_DIR, OUTPUT_DIR 설정 그대로 사용)
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.gaussian_pre_fattal.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
 
 import utils.utils as utils
 

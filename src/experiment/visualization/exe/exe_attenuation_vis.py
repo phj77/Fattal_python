@@ -26,7 +26,7 @@ if str(src_dir) not in sys.path:
 
 from fattal.fattal_tmo import createGaussianPyramids, calculate_level_scaling_factor, calculate_attenuation, pfstmo_fattal02
 from processing.gamma_correction import Frame, apply_gamma_frame
-from exe.config.config import INPUT_DIR, OUTPUT_DIR as CONFIG_OUTPUT_DIR, PARAM_GRID
+from experiment.visualization.config.config import INPUT_DIR, OUTPUT_DIR as CONFIG_OUTPUT_DIR, PARAM_GRID
 import utils.utils as utils
 
 DATA_DIR = Path(INPUT_DIR)
@@ -44,7 +44,7 @@ post_gamma = PARAM_GRID['post_gamma'][0]
 
 # --- Visualization options ---
 # Y축 (컬러바 값의 범위)을 전체 피라미드 레벨에 대해 동일하게 고정할지 여부
-FIX_Y_AXIS = False
+FIX_Y_AXIS = True
 
 MSIZE = 8 if fftsolver else 32
 
@@ -160,7 +160,7 @@ def process_single_image(img_path, data_folder_name):
 
     # Calculate global min/max across all valid maps for unified Y-axis (colorbar) range if FIX_Y_AXIS is True
     if FIX_Y_AXIS:
-        all_maps = [s for s in scaling_factors if s is not None] + [final_att]
+        all_maps = [s for s in scaling_factors if s is not None] #+ [final_att]
         global_vmin = min(m.min() for m in all_maps)
         global_vmax = max(m.max() for m in all_maps)
     else:

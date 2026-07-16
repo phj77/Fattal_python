@@ -12,7 +12,7 @@ sys.path.append(src_dir)
 # DCT-II 실험용 모듈 가져오기
 from experiment.DCT2.fattal.fattal_tmo import pfstmo_fattal02
 from processing.gamma_correction import Frame, apply_gamma_frame
-from exe.config.config import INPUT_DIR, get_parameter_combinations
+from experiment.DCT2.config.config import INPUT_DIR, get_parameter_combinations
 import utils.utils as utils
 
 # 실험 전용 결과 저장 디렉토리

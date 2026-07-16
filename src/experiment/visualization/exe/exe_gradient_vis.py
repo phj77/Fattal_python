@@ -23,26 +23,20 @@ from processing.gamma_correction import Frame, apply_gamma_frame
 import utils.utils as utils
 
 # --- Path setup ---
-DATA_DIR = project_root / "data" / "data_one"
-OUTPUT_DIR = project_root / "test" / "gradient_pyramid"
+from experiment.visualization.config.config import INPUT_DIR, OUTPUT_DIR as CONFIG_OUTPUT_DIR, PARAM_GRID
 
-# --- Dataset parameter configuration ---
-DATASET_PARAMS = {
-    "1": {"alpha": 0.9, "beta": 0.82},
-    "2": {"alpha": 0.9, "beta": 0.80},
-    "3": {"alpha": 0.9, "beta": 0.81},
-    "4": {"alpha": 0.9, "beta": 0.84},
-    "5": {"alpha": 0.3, "beta": 0.93},
-    "6": {"alpha": 0.9, "beta": 0.81},
-    "7": {"alpha": 0.9, "beta": 0.80}
-}
+DATA_DIR = Path(INPUT_DIR)
+OUTPUT_DIR = Path(CONFIG_OUTPUT_DIR)
 
-opt_noise = 0.001
-newfattal = True
-fftsolver = True
-detail_level = 0
-pre_gamma = 1.0
-post_gamma = 1.0
+# --- Parameters (from config.py) ---
+opt_alpha = PARAM_GRID['opt_alpha'][0]
+opt_beta = PARAM_GRID['opt_beta'][0]
+opt_noise = PARAM_GRID['opt_noise'][0]
+newfattal = PARAM_GRID['newfattal'][0]
+fftsolver = PARAM_GRID['fftsolver'][0]
+detail_level = PARAM_GRID['detail_level'][0]
+pre_gamma = PARAM_GRID['pre_gamma'][0]
+post_gamma = PARAM_GRID['post_gamma'][0]
 
 MSIZE = 8 if fftsolver else 32
 
@@ -152,29 +146,40 @@ def main():
     print(f"Input Directory: {DATA_DIR}")
     print(f"Output Directory: {OUTPUT_DIR}\n")
 
-    for dataset_id in sorted(DATASET_PARAMS.keys(), key=int):
-        params = DATASET_PARAMS[dataset_id]
-        opt_alpha = params["alpha"]
-        opt_beta = params["beta"]
+    if not DATA_DIR.exists():
+        print(f"[ERROR] Input directory does not exist: {DATA_DIR}")
+        return
 
-        dataset_path = DATA_DIR / dataset_id
-        if not dataset_path.exists():
-            print(f"  [SKIP] Dataset folder {dataset_path} does not exist.")
-            continue
-
-        hdr_files = list(dataset_path.glob("*.hdr"))
-        if not hdr_files:
-            print(f"  [SKIP] No .hdr files in {dataset_path}.")
-            continue
-
+    # Check if DATA_DIR directly contains .hdr files
+    direct_hdr_files = list(DATA_DIR.glob('*.hdr'))
+    if direct_hdr_files:
+        dataset_id = DATA_DIR.name
         print(f"\n--- Dataset [{dataset_id}] Processing (alpha={opt_alpha}, beta={opt_beta}) ---")
-        for hdr_path in hdr_files:
+        for hdr_path in direct_hdr_files:
             print(f"  Image: {hdr_path.name}")
             process_image(hdr_path, dataset_id, opt_alpha, opt_beta)
+    else:
+        # Otherwise scan sub-folders
+        data_folders = sorted([
+            d for d in DATA_DIR.iterdir() if d.is_dir()
+        ], key=lambda x: x.name)
+
+        if not data_folders:
+            print(f"No data folders or .hdr files found in: {DATA_DIR}")
+            return
+
+        for dataset_path in data_folders:
+            dataset_id = dataset_path.name
+            hdr_files = list(dataset_path.glob("*.hdr"))
+            if not hdr_files:
+                continue
+
+            print(f"\n--- Dataset [{dataset_id}] Processing (alpha={opt_alpha}, beta={opt_beta}) ---")
+            for hdr_path in hdr_files:
+                print(f"  Image: {hdr_path.name}")
+                process_image(hdr_path, dataset_id, opt_alpha, opt_beta)
 
     utils.print_elapsed("Log-gradient map visualization complete")
     print(f"\nAll outputs successfully saved to: {OUTPUT_DIR}")
-
-
 if __name__ == "__main__":
     main()

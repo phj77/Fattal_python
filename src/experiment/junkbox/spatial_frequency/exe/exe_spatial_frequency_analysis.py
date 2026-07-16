@@ -18,17 +18,17 @@ if hasattr(sys.stderr, 'reconfigure'):
 CURRENT_DIR = Path(__file__).resolve().parent
 EXPERIMENT_DIR = CURRENT_DIR.parent
 EXPERIMENTS_ROOT = EXPERIMENT_DIR.parent
-SRC_DIR = EXPERIMENTS_ROOT.parent
+SRC_DIR = EXPERIMENTS_ROOT.parent.parent
 PROJECT_ROOT = SRC_DIR.parent
 
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from experiment.spatial_frequency.core.spatial_frequency_analyzer import analyze_spatial_frequency
+from experiment.junkbox.spatial_frequency.core.spatial_frequency_analyzer import analyze_spatial_frequency
 
 # Config로부터 기본 경로 가져오기 (실패 시 기본 경로 적용)
 try:
-    from exe.config.config import INPUT_DIR, test_path
+    from experiment.junkbox.spatial_frequency.config.config import INPUT_DIR, test_path
     DEFAULT_INPUT_DIR = Path(INPUT_DIR)
     DEFAULT_OUTPUT_DIR = Path(test_path) / "spatial_frequency_analysis"
 except Exception:

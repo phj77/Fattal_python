@@ -11,9 +11,9 @@ test_path = project_root / "test"
 experiment_result_path = project_root / "experiment_result"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "tmp")
+INPUT_DIR = str(data_path / "hard_case"/"8")
 #OUTPUT_DIR = str(test_path / "base_detail_seperate"/"2"/"boundary")
-OUTPUT_DIR = str(experiment_result_path/"base_detail_seperate"/"tmp")
+OUTPUT_DIR = str(experiment_result_path/"base_detail_seperate"/"tmp"/"hard_case"/"8")
 
 # ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
 # 직사각형 크롭 범위: (min_pixel, max_pixel)
@@ -50,7 +50,7 @@ beta_range_v2 = np.round(np.arange(0.2, 1.00, 0.1), 2).tolist()
 PARAM_GRID = {
     # Fattal 파라미터
     'opt_alpha': [0.8],
-    'opt_beta': [0.8,0.85],
+    'opt_beta': [0.8],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],
@@ -60,7 +60,7 @@ PARAM_GRID = {
     'gf_radius': [6,10,14],
     'gf_eps': [0.001, 0.005, 0.01, 0.05], #[0.001, 0.005, 0.01, 0.05]
     # Detail 합성 파라미터
-    'detail_factor': [6],
+    'detail_factor': [5],
 }
 
 def get_parameter_combinations():

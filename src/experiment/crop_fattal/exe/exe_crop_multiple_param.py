@@ -19,21 +19,9 @@ if src_dir not in sys.path:
 from fattal.fattal_tmo import pfstmo_fattal02
 
 # 파라미터 및 설정 불러오기
-from exe.config.config import INPUT_DIR, OUTPUT_DIR, get_parameter_combinations
+from experiment.crop_fattal.config.config import INPUT_DIR, OUTPUT_DIR, CROP_Y_RANGE, CROP_X_RANGE, get_parameter_combinations
 
 import utils.utils as utils
-
-# ─── 각 데이터셋별 이미지 크롭 범위 설정 ───────────────────────────────────
-CROP_RANGES = {
-    1: {'Y': (459, 1577), 'X': (121, 3072)},
-    2: {'Y': (182, 1884), 'X': (110, 3072)},
-    3: {'Y': (201, 1833), 'X': (311, 2982)},
-    4: {'Y': (278, 1728), 'X': (273, 3072)},
-    5: {'Y': (700, 2048), 'X': (0, 2945)},
-    6: {'Y': (324, 1746), 'X': (278, 3072)},
-    7: {'Y': (307, 1746), 'X': (100, 3012)}
-}
-# ─────────────────────────────────────────────────────────────────────────────
 
 def main():
     utils.start_timer()
@@ -55,26 +43,14 @@ def main():
     param_combinations = get_parameter_combinations()
     total_tasks = len(hdr_files) * len(param_combinations)
 
-    # 데이터셋 번호 판별 및 크롭 범위 설정
-    dataset_num = None
-    path_parts = os.path.normpath(INPUT_DIR).split(os.sep)
-    for part in reversed(path_parts):
-        try:
-            val = int(part)
-            if val in CROP_RANGES:
-                dataset_num = val
-                break
-        except ValueError:
-            continue
+    # 크롭 범위 설정
+    crop_y_range = CROP_Y_RANGE
+    crop_x_range = CROP_X_RANGE
 
-    if dataset_num is not None:
-        crop_y_range = CROP_RANGES[dataset_num]['Y']
-        crop_x_range = CROP_RANGES[dataset_num]['X']
-        print(f"데이터셋 [{dataset_num}] 크롭 범위 적용 - Y축: {crop_y_range}, X축: {crop_x_range}")
+    if crop_y_range is not None or crop_x_range is not None:
+        print(f"크롭 범위 적용 - Y축: {crop_y_range}, X축: {crop_x_range}")
     else:
-        crop_y_range = None
-        crop_x_range = None
-        print("경고: 데이터셋 번호를 판별할 수 없어 크롭을 적용하지 않습니다.")
+        print("크롭을 적용하지 않습니다 (전체 이미지 사용).")
 
     utils.print_elapsed("구간 1 (환경 설정 및 파일 탐색 완료)")
     print(f"총 {len(hdr_files)}개의 이미지와 {len(param_combinations)}개의 파라미터 조합이 감지되었습니다.")

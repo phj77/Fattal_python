@@ -10,10 +10,10 @@ test_path = project_root / "test"
 experiment_result_path = project_root / "experiment_result"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path/"hard_data")
+INPUT_DIR = str(data_path/"hard_case"/"2")
 #OUTPUT_DIR = str(test_path/"scaling_factor_visualization"/"detail_level_0")
 # OUTPUT_DIR = str(test_path/"scanline"/"vertical")
-OUTPUT_DIR = str(experiment_result_path/"tmp")
+OUTPUT_DIR = str(experiment_result_path/"BASE_ALGORITHM"/"hard_case"/"2")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)
@@ -35,7 +35,7 @@ PYRAMID_TOP_SIZE = 2**3
 # 실험할 파라미터 값들을 정의합니다.
 PARAM_GRID = {
     'opt_alpha': [0.8],
-    'opt_beta': [0.81,0.82,0.83,0.84,0.85,0.86,0.87,0.88,0.89],
+    'opt_beta': [0.78,0.81,0.82,0.83,0.84,0.85,0.86,0.87,0.88,0.89,0.9,0.91,0.92,0.93,0.94,0.95,0.96,0.97,0.98,0.99],
     'opt_noise': [0.001],
     'newfattal': [True],
     'fftsolver': [True],

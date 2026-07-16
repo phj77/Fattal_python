@@ -12,13 +12,13 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8')
 
 current_file = Path(__file__).resolve()
-src_dir = current_file.parents[3]  # .../Fattal_python/src
+src_dir = current_file.parents[4]  # .../Fattal_python/src
 if str(src_dir) not in sys.path:
     sys.path.append(str(src_dir))
 
 # scaling_factor_modified_monotonic 모듈 가져오기
-from experiment.scaling_factor_modified_monotonic.fattal.fattal_tmo import pfstmo_fattal02
-from experiment.scaling_factor_modified_monotonic.config.config import (
+from experiment.junkbox.scaling_factor_modified_monotonic.fattal.fattal_tmo import pfstmo_fattal02
+from experiment.junkbox.scaling_factor_modified_monotonic.config.config import (
     INPUT_DIR, OUTPUT_DIR, get_parameter_combinations,
     CROP_Y_RANGE, CROP_X_RANGE
 )

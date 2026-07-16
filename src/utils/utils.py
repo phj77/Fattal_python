@@ -331,9 +331,9 @@ def save_vertical_scanline(image, col_index, stage_name, highlight_ranges=None, 
     ax.set_xlim(0, len(scanline) - 1)
     
     # 통계 텍스트 상자 배치
-    ax.text(0.98, 0.95, stats_text, transform=ax.transAxes, verticalalignment='top', horizontalalignment='right',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffffff', edgecolor='#cccccc', alpha=0.8),
-            fontsize=9, family='monospace')
+    # ax.text(0.98, 0.95, stats_text, transform=ax.transAxes, verticalalignment='top', horizontalalignment='right',
+    #         bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffffff', edgecolor='#cccccc', alpha=0.8),
+    #         fontsize=9, family='monospace')
             
     # 레이아웃 최적화
     plt.tight_layout()

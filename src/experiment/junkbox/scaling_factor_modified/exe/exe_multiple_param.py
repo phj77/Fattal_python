@@ -8,7 +8,7 @@ import time
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 exp_dir = os.path.dirname(current_dir)
-src_dir = os.path.dirname(os.path.dirname(exp_dir))
+src_dir = os.path.dirname(os.path.dirname(os.path.dirname(exp_dir)))
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
@@ -16,10 +16,10 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 # 사용자 정의 모듈 (환경에 맞게 존재해야 함)
-from experiment.scaling_factor_modified.fattal.fattal_tmo import pfstmo_fattal02
+from experiment.junkbox.scaling_factor_modified.fattal.fattal_tmo import pfstmo_fattal02
 
 # 파라미터 및 설정 불러오기
-from experiment.scaling_factor_modified.config.config import (
+from experiment.junkbox.scaling_factor_modified.config.config import (
     INPUT_DIR, OUTPUT_DIR, get_parameter_combinations,
     CROP_Y_RANGE, CROP_X_RANGE
 )
