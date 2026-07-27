@@ -3,17 +3,17 @@ import itertools
 import numpy as np
 from pathlib import Path
 
+
 current_file = Path(__file__).resolve()
-# config.py → config/ → base_detail_seperate/ → experiment/ → src/ → Fattal_python/
-project_root = current_file.parents[4]
+project_root = current_file.parents[4]# Fattal_python
+
 data_path = project_root / "data" 
-test_path = project_root / "test"
-experiment_result_path = project_root / "experiment_result"
+experiment_result_path = project_root / "experiment_result" / "base_detail_seperate"
 
 # 입출력 디렉토리 설정
-INPUT_DIR = str(data_path / "hard_case"/"8")
-#OUTPUT_DIR = str(test_path / "base_detail_seperate"/"2"/"boundary")
-OUTPUT_DIR = str(experiment_result_path/"base_detail_seperate"/"tmp"/"hard_case"/"8")
+INPUT_DIR = str(data_path / "hard_case"/ "2")
+OUTPUT_DIR = str(experiment_result_path /"hard_case"/"2")
+
 
 # ─── 이미지 크롭(자르기) 범위 설정 ──────────────────────────────────────────
 # 직사각형 크롭 범위: (min_pixel, max_pixel)
@@ -57,10 +57,10 @@ PARAM_GRID = {
     'detail_level': [0],
     'hpf_sigma': [0.007],
     # Guided Filter 파라미터
-    'gf_radius': [6,10,14],
-    'gf_eps': [0.001, 0.005, 0.01, 0.05], #[0.001, 0.005, 0.01, 0.05]
+    'gf_radius': [10],
+    'gf_eps': [0.005], #[0.001, 0.005, 0.01, 0.05]
     # Detail 합성 파라미터
-    'detail_factor': [5],
+    'detail_factor': [7],
 }
 
 def get_parameter_combinations():

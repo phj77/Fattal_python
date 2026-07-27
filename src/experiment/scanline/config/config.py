@@ -17,8 +17,8 @@ experiment_result_path = project_root / "experiment_result"
 
 # 입출력 디렉토리 설정
 # scanline의 경우 data/data_one을 기본 입력 디렉토리로 사용합니다.
-INPUT_DIR = str(data_path / "data_one")
-OUTPUT_DIR = str(experiment_result_path / "scanline" / "vertical_scanline")
+INPUT_DIR = str(data_path / "data_one"/"2")
+OUTPUT_DIR = str(experiment_result_path / "scanline" / "vertical_scanline"/"2"/"tmp_row_mul10")
 
 # ─── 파라미터 자동 생성 설정 ────────────────────────────────────────
 # np.arange(시작, 끝(포함X), 간격)

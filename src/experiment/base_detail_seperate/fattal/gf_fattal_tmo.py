@@ -60,6 +60,9 @@ def tmo_fattal02_logdomain(H, alfa, beta, noise, newfattal, fftsolver, detail_le
     attenuation_map = calculate_attenuation(scaling_factor, pyramids, n_pyramid_levels, newfattal)
     utils.print_elapsed("     [tmo_logdomain] FI 행렬 및 그래디언트 계산 완료")
 
+    #tmp
+    attenuation_map[298:325, 1800: 2000] *= 1.5
+
     # 기울기 감쇠
     if fftsolver:
         Gx = np.empty_like(H)
